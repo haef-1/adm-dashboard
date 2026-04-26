@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ADM Production PML2 — Dashboard</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <link rel="stylesheet" href="css/base.css" />
+    <link rel="stylesheet" href="css/layout.css" />
+    <link rel="stylesheet" href="css/components.css" />
+  </head>
+  <body>
+    <!-- ══════ LOGIN SCREEN ══════ -->
+    <div class="login-screen" id="loginScreen">
+      <div class="login-card">
+        <div class="login-logo">P2</div>
+        <h2 class="login-title" id="loginTitle">Login</h2>
+        <p class="login-subtitle">ADM Production PML2 Dashboard</p>
+        <form id="loginForm" autocomplete="on">
+          <div class="login-field">
+            <label for="loginEmail">Email</label>
+            <input type="email" id="loginEmail" required placeholder="email@example.com" autocomplete="email" />
+          </div>
+          <div class="login-field">
+            <label for="loginPassword">Password</label>
+            <input type="password" id="loginPassword" required placeholder="Password" autocomplete="current-password" />
+          </div>
+          <div class="login-error" id="loginError"></div>
+          <button type="submit" class="login-btn" id="loginBtn">
+            <span id="loginBtnLabel">Sign In</span>
+          </button>
+        </form>
+        <a href="#" class="login-toggle" id="toggleAuth">Need an account? Sign up</a>
+      </div>
+    </div>
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar" id="sidebar" style="display:none">
+      <div class="sidebar-header">
+        <div class="sidebar-logo">P2</div>
+      </div>
+      <nav class="sidebar-nav">
+        <div class="nav-group-label">IN CHART</div>
+        <a class="nav-item active" href="#overview" data-page="overview">
+          <span class="nav-icon">📊</span
+          ><span class="nav-label">Overview</span>
+        </a>
+        <a class="nav-item" href="#karkas" data-page="karkas">
+          <span class="nav-icon">🍗</span><span class="nav-label">Karkas</span>
+        </a>
+        <a class="nav-item" href="#ayam-utuh" data-page="ayam-utuh">
+          <span class="nav-icon">🐔</span
+          ><span class="nav-label">Ayam Utuh</span>
+        </a>
+        <a class="nav-item" href="#cut-up" data-page="cut-up">
+          <span class="nav-icon">✂️</span><span class="nav-label">Cut Up</span>
+        </a>
+        <a class="nav-item" href="#parting" data-page="parting">
+          <span class="nav-icon">🔪</span><span class="nav-label">Parting</span>
+        </a>
+        <a class="nav-item" href="#boneless" data-page="boneless">
+          <span class="nav-icon">🦴</span
+          ><span class="nav-label">Boneless</span>
+        </a>
+        <a class="nav-item" href="#mdm" data-page="mdm">
+          <span class="nav-icon">🥩</span><span class="nav-label">MDM</span>
+        </a>
+      </nav>
+      <div class="sidebar-footer">©2026 Adm Prod Pml2</div>
+    </aside>
+
+    <!-- MAIN AREA -->
+    <main class="main" style="display:none">
+      <!-- TOPBAR -->
+      <header class="topbar">
+        <div class="topbar-brand">Pemalang 2</div>
+        <div class="topbar-search">
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <circle cx="11" cy="11" r="8" />
+            <path d="M21 21l-4.35-4.35" />
+          </svg>
+          <input
+            type="text"
+            placeholder="Search"
+            disabled
+            class="search-input"
+          />
+        </div>
+        <button class="btn-import" id="btnImport">
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+            <polyline points="17 8 12 3 7 8" />
+            <line x1="12" y1="3" x2="12" y2="15" />
+          </svg>
+          Import
+        </button>
+        <button class="btn-logout" id="btnLogout">
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
+            <polyline points="16 17 21 12 16 7" />
+            <line x1="21" y1="12" x2="9" y2="12" />
+          </svg>
+          Logout
+        </button>
+        <input
+          type="file"
+          id="fileImport"
+          accept=".xlsx,.xls"
+          style="display: none"
+        />
+      </header>
+
+      <!-- PAGE CONTENT (swapped by router) -->
+      <div class="page-content" id="pageContent">
+        <!-- Overview page loaded here -->
+      </div>
+    </main>
+
+    <!-- IMPORT OVERLAY -->
+    <div class="import-overlay" id="importOverlay">
+      <div class="import-spinner"></div>
+      <div class="import-label">MEMPROSES...</div>
+    </div>
+    <div class="import-toast" id="importToast"></div>
+
+    <!-- BACKGROUND LOADER (non-blocking) -->
+    <div class="bg-loader" id="bgLoader">
+      <div class="bg-loader-spinner"></div>
+      <div class="bg-loader-text">
+        <span class="bg-loader-title">Loading history</span>
+        <span class="bg-loader-label"></span>
+      </div>
+    </div>
+
+    <!-- ENGINE -->
+    <script src="js/engine/db.js"></script>
+    <script src="js/engine/auth.js"></script>
+    <script src="js/engine/transform.js"></script>
+    <script src="js/engine/kpi.js"></script>
+    <script src="js/engine/byproduct.js"></script>
+    <script src="js/engine/search.js"></script>
+
+    <!-- UI -->
+    <script src="js/ui/navbar.js"></script>
+    <script src="js/ui/datepicker.js"></script>
+    <script src="js/ui/charts.js"></script>
+    <script src="js/ui/import.js"></script>
+
+    <!-- PAGES -->
+    <script src="js/pages/overview.js"></script>
+    <script src="js/pages/karkas.js"></script>
+
+    <!-- INIT -->
+    <script src="js/main.js"></script>
+  </body>
+</html>

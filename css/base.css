@@ -1,0 +1,125 @@
+/* ═══════════════════════════════════════
+   BASE.CSS — Reset, Variables, Typography
+   ═══════════════════════════════════════ */
+
+*,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
+
+:root {
+  /* ── Core palette ── */
+  --bg: #f4f5f9;
+  --surface: #ffffff;
+  --surface-alt: #f8f9fc;
+  --border: #e2e5ef;
+  --border-light: #edf0f7;
+
+  /* ── Text ── */
+  --text: #1a1d2e;
+  --text-mid: #4a4f6a;
+  --text-soft: #6b7094;
+  --text-muted: #9498b3;
+
+  /* ── Accent ── */
+  --blue: #3b7ddd;
+  --blue-light: #e8f0fc;
+  --blue-mid: #85B7EB;
+  --green: #10b981;
+  --green-light: #ecfdf5;
+  --red: #e05252;
+  --red-light: #fef2f2;
+  --amber: #f59e0b;
+  --amber-light: #fffbeb;
+  --purple: #8b5cf6;
+  --purple-light: #f5f3ff;
+  --pink: #ec4899;
+  --pink-light: #fdf2f8;
+  --teal: #14b8a6;
+
+  /* ── Semantic ── */
+  --up-color: #10b981;
+  --down-color: #e05252;
+  --flat-color: var(--text-muted);
+
+  /* ── Calendar heatmap (blue shallow) ── */
+  --cal-0: transparent;
+  --cal-1: #E6F1FB;
+  --cal-2: #C0D9F5;
+  --cal-3: #9AC1EE;
+  --cal-4: #85B7EB;
+  --cal-label: #1a2540;
+
+  /* ── Chart dept colors ── */
+  --dept-cutup: #34d399;
+  --dept-boneless: #60a5fa;
+  --dept-au: #fbbf24;
+  --dept-parting: #f472b6;
+
+  /* ── Shadows ── */
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.04);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.06);
+  --shadow-lg: 0 8px 24px rgba(0,0,0,0.08);
+
+  /* ── Radius ── */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+
+  /* ── Font ── */
+  --font-body: 'Plus Jakarta Sans', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Courier New', monospace;
+
+  /* ── Transitions ── */
+  --transition: 0.2s ease;
+}
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.5;
+  letter-spacing: -0.01em;
+  display: flex;
+  min-height: 100vh;
+}
+
+/* ── Typography ── */
+h1, h2, h3, h4 {
+  font-family: var(--font-body);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.mono {
+  font-family: var(--font-mono);
+  letter-spacing: -0.02em;
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+/* ── Selection ── */
+::selection {
+  background: var(--blue);
+  color: #fff;
+}
+
+/* ── Utility ── */
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0,0,0,0);
+  white-space: nowrap;
+  border: 0;
+}
