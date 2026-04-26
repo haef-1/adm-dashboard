@@ -15,8 +15,10 @@ const App = (() => {
       Auth.onAuthChange((s) => {
         if (s) {
           Auth.showApp();
+          Auth.startIdleWatch();
           boot();
         } else {
+          Auth.stopIdleWatch();
           Auth.showLogin();
         }
       });
@@ -26,8 +28,12 @@ const App = (() => {
     Auth.showApp();
     Auth.initLoginUI();
     Auth.onAuthChange((s) => {
-      if (!s) Auth.showLogin();
+      if (!s) {
+        Auth.stopIdleWatch();
+        Auth.showLogin();
+      }
     });
+    Auth.startIdleWatch();
     await boot();
   }
 

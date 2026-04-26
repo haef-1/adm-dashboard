@@ -7,7 +7,7 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--surface);
-  margin: 16px 20px;
+  margin: 16px 5px;
   overflow: hidden;
 }
 
@@ -308,13 +308,11 @@
 }
 
 .cal-cell.has-data:hover {
-  filter: brightness(0.92);
-  box-shadow: 0 0 0 1.5px var(--blue-mid);
+  box-shadow: 0 0 0 1.5px var(--blue);
 }
 
 .cal-cell.selected {
-  box-shadow: inset 0 0 0 1px #000;
-  filter: brightness(1.1);
+  box-shadow: 0 0 0 1.5px var(--blue);
 }
 
 .cal-cell .cal-date {
@@ -1326,9 +1324,22 @@
   .kpi-row {
     display: grid;
     grid-template-columns: 1fr 1fr;
+    padding: 0 10px 12px;
+    gap: 8px;
+  }
+  .kpi-card {
+    min-width: 0;
+    padding: 10px 8px 8px;
   }
   .kpi-card--truck {
     grid-column: 1 / -1;
+    min-width: 0;
+  }
+  .kpi-card-value {
+    font-size: 18px;
+  }
+  .kpi-card-label {
+    font-size: 10px;
   }
 }
 
@@ -1370,12 +1381,14 @@
 
 /* ══════ Login Screen ══════ */
 .login-screen {
+  position: fixed;
+  inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 100vh;
   background: var(--bg);
   padding: 20px;
+  z-index: 9999;
 }
 
 .login-card {
@@ -1390,18 +1403,7 @@
 }
 
 .login-logo {
-  width: 56px;
-  height: 56px;
-  margin: 0 auto 16px;
-  background: var(--blue);
-  color: #fff;
-  font-family: var(--font-mono);
-  font-size: 22px;
-  font-weight: 700;
-  border-radius: 14px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: none;
 }
 
 .login-title {
@@ -1454,6 +1456,66 @@
   color: var(--red);
   min-height: 20px;
   margin-bottom: 6px;
+}
+
+/* ══════ Session Expired Modal ══════ */
+.session-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 20000;
+}
+
+.session-modal-overlay.show {
+  display: flex;
+}
+
+.session-modal {
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  padding: 32px 28px 24px;
+  width: 100%;
+  max-width: 340px;
+  text-align: center;
+  box-shadow: var(--shadow-lg);
+}
+
+.session-modal-icon {
+  font-size: 36px;
+  margin-bottom: 12px;
+}
+
+.session-modal-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+
+.session-modal-msg {
+  font-size: 13px;
+  color: var(--text-soft);
+  margin-bottom: 20px;
+}
+
+.session-modal-btn {
+  padding: 10px 32px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--blue);
+  color: #fff;
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity var(--transition);
+}
+
+.session-modal-btn:hover {
+  opacity: 0.9;
 }
 
 .login-btn {

@@ -27,7 +27,8 @@ const Charts = (() => {
       const datasets = chart.data.datasets;
       if (!datasets.length) return;
       const n = chart.data.labels.length;
-      const fontSize = n > 5 ? 9 : 10;
+      const isDesktop = window.innerWidth > 860;
+      const fontSize = isDesktop ? (n > 5 ? 11 : 12) : (n > 5 ? 9 : 10);
 
       // Label tengah tiap segment
       datasets.forEach((ds, di) => {

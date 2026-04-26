@@ -64,26 +64,13 @@ const KPI = (() => {
     };
   }
 
-  // ── Calendar heatmap color ──
-  function calColor(value, min, max) {
+  // ── Calendar heatmap color (day-over-day comparison) ──
+  function calColor(value, prevValue) {
     if (!value) return 'transparent';
-    const range = max - min || 1;
-    const ratio = Math.max(0, Math.min(1, (value - min) / range));
-    // Blue shallow range: #E6F1FB → #C0D9F5 → #9AC1EE → #85B7EB
-    const colors = [
-      [230, 241, 251], // #E6F1FB
-      [192, 217, 245], // #C0D9F5
-      [154, 193, 238], // #9AC1EE
-      [133, 183, 235], // #85B7EB
-    ];
-    const idx = ratio * (colors.length - 1);
-    const lo = Math.floor(idx);
-    const hi = Math.min(lo + 1, colors.length - 1);
-    const t = idx - lo;
-    const r = Math.round(colors[lo][0] + (colors[hi][0] - colors[lo][0]) * t);
-    const g = Math.round(colors[lo][1] + (colors[hi][1] - colors[lo][1]) * t);
-    const b = Math.round(colors[lo][2] + (colors[hi][2] - colors[lo][2]) * t);
-    return `rgb(${r},${g},${b})`;
+    if (prevValue === null || prevValue === undefined) return '#ddeaf8';
+    if (value > prevValue) return '#d2f3e2';
+    if (value < prevValue) return '#fcd5d5';
+    return '#ddeaf8';
   }
 
   // ── ISO week number (v3 logic) ──

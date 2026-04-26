@@ -45,6 +45,14 @@ const Auth = (() => {
     document.getElementById('loginScreen').style.display = 'flex';
     document.getElementById('sidebar').style.display = 'none';
     document.querySelector('.main').style.display = 'none';
+    const form = document.getElementById('loginForm');
+    if (form) form.reset();
+    const errorEl = document.getElementById('loginError');
+    if (errorEl) errorEl.textContent = '';
+    const submitBtn = document.getElementById('loginBtn');
+    if (submitBtn) submitBtn.disabled = false;
+    const submitLabel = document.getElementById('loginBtnLabel');
+    if (submitLabel) submitLabel.textContent = 'Sign In';
   }
 
   let _role = null;
@@ -113,5 +121,38 @@ const Auth = (() => {
     }
   }
 
-  return { getSession, getUser, getRole, isAdmin, signIn, signUp, signOut, onAuthChange, showLogin, showApp, applyRole, initLoginUI };
+  // ── Idle timeout (10 minutes) ──
+  const IDLE_TIMEOUT = 30 * 60 * 1000;
+  let _idleTimer = null;
+
+  function _resetIdleTimer() {
+    if (_idleTimer) clearTimeout(_idleTimer);
+    _idleTimer = setTimeout(async () => {
+      stopIdleWatch();
+      await getClient().auth.signOut();
+      _role = null;
+      const modal = document.getElementById('sessionModal');
+      const btn = document.getElementById('sessionModalBtn');
+      modal.classList.add('show');
+      btn.onclick = () => {
+        modal.classList.remove('show');
+        showLogin();
+      };
+    }, IDLE_TIMEOUT);
+  }
+
+  function startIdleWatch() {
+    const events = ['mousedown', 'keydown', 'scroll', 'touchstart'];
+    events.forEach(ev => document.addEventListener(ev, _resetIdleTimer, { passive: true }));
+    _resetIdleTimer();
+  }
+
+  function stopIdleWatch() {
+    if (_idleTimer) clearTimeout(_idleTimer);
+    _idleTimer = null;
+    const events = ['mousedown', 'keydown', 'scroll', 'touchstart'];
+    events.forEach(ev => document.removeEventListener(ev, _resetIdleTimer));
+  }
+
+  return { getSession, getUser, getRole, isAdmin, signIn, signUp, signOut, onAuthChange, showLogin, showApp, applyRole, initLoginUI, startIdleWatch, stopIdleWatch };
 })();

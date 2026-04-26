@@ -207,8 +207,6 @@ const OverviewPage = (() => {
     const monthIdx = months.indexOf(calMonth);
 
     const values = Object.values(calData.days);
-    const minVal = values.length ? Math.min(...values) : 0;
-    const maxVal = values.length ? Math.max(...values) : 1;
 
     // Build header
     const [yr, mo] = calMonth.split("-").map(Number);
@@ -270,12 +268,14 @@ const OverviewPage = (() => {
     // Day cells
     for (let d = 1; d <= daysInMonth; d++) {
       const dateStr = calMonth + "-" + String(d).padStart(2, "0");
+      const prevDateStr = calMonth + "-" + String(d - 1).padStart(2, "0");
       const count = calData.days[dateStr] || 0;
+      const prevCount = d > 1 ? (calData.days[prevDateStr] || 0) : null;
       const el = document.createElement("div");
       el.className = "cal-cell" + (count ? " has-data" : "");
 
       if (count) {
-        el.style.background = KPI.calColor(count, minVal, maxVal);
+        el.style.background = KPI.calColor(count, prevCount);
         if (dateStr === selectedDate) el.classList.add("selected");
         el.addEventListener("click", () => {
           selectedDate =
@@ -285,9 +285,10 @@ const OverviewPage = (() => {
         });
       }
 
+      const textColor = count ? "var(--text)" : "var(--text-muted)";
       el.innerHTML = `
-        <span class="cal-date" style="color:${count ? "var(--cal-label)" : "var(--text-muted)"}">${d}</span>
-        ${count ? `<span class="cal-val" style="color:var(--cal-label)">${count}</span>` : ""}
+        <span class="cal-date" style="color:${textColor}">${d}</span>
+        ${count ? `<span class="cal-val" style="color:${textColor}">${count}</span>` : ""}
       `;
 
       grid.appendChild(el);

@@ -47,28 +47,25 @@
       <nav class="sidebar-nav">
         <div class="nav-group-label">IN CHART</div>
         <a class="nav-item active" href="#overview" data-page="overview">
-          <span class="nav-icon">📊</span
-          ><span class="nav-label">Overview</span>
+          <span class="nav-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 20V10M12 20V4M6 20V14"/></svg></span><span class="nav-label">Overview</span>
         </a>
         <a class="nav-item" href="#karkas" data-page="karkas">
-          <span class="nav-icon">🍗</span><span class="nav-label">Karkas</span>
+          <span class="nav-icon"><img src="images/karkas.png" width="22" height="22" alt="Karkas"></span><span class="nav-label">Karkas</span>
         </a>
         <a class="nav-item" href="#ayam-utuh" data-page="ayam-utuh">
-          <span class="nav-icon">🐔</span
-          ><span class="nav-label">Ayam Utuh</span>
+          <span class="nav-icon"><img src="images/ayam-utuh.png" width="26" height="26" alt="Ayam Utuh"></span><span class="nav-label">Ayam Utuh</span>
         </a>
         <a class="nav-item" href="#cut-up" data-page="cut-up">
-          <span class="nav-icon">✂️</span><span class="nav-label">Cut Up</span>
+          <span class="nav-icon"><img src="images/cutup.png" width="26" height="26" alt="Cut Up"></span><span class="nav-label">Cut Up</span>
         </a>
         <a class="nav-item" href="#parting" data-page="parting">
-          <span class="nav-icon">🔪</span><span class="nav-label">Parting</span>
+          <span class="nav-icon"><img src="images/parting.png" width="26" height="26" alt="Parting"></span><span class="nav-label">Parting</span>
         </a>
         <a class="nav-item" href="#boneless" data-page="boneless">
-          <span class="nav-icon">🦴</span
-          ><span class="nav-label">Boneless</span>
+          <span class="nav-icon"><img src="images/boneless.png" width="26" height="26" alt="Boneless"></span><span class="nav-label">Boneless</span>
         </a>
         <a class="nav-item" href="#mdm" data-page="mdm">
-          <span class="nav-icon">🥩</span><span class="nav-label">MDM</span>
+          <span class="nav-icon"><img src="images/mdm.png" width="26" height="26" alt="MDM"></span><span class="nav-label">MDM</span>
         </a>
       </nav>
       <div class="sidebar-footer">©2026 Adm Prod Pml2</div>
@@ -141,6 +138,16 @@
         <!-- Overview page loaded here -->
       </div>
     </main>
+
+    <!-- SESSION EXPIRED MODAL -->
+    <div class="session-modal-overlay" id="sessionModal">
+      <div class="session-modal">
+        <div class="session-modal-icon">&#10060;</div>
+        <h3 class="session-modal-title">Session Expired</h3>
+        <p class="session-modal-msg">Your session has expired due to inactivity.</p>
+        <button class="session-modal-btn" id="sessionModalBtn">OK</button>
+      </div>
+    </div>
 
     <!-- IMPORT OVERLAY -->
     <div class="import-overlay" id="importOverlay">
