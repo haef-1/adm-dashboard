@@ -33,8 +33,9 @@ const App = (() => {
 
   async function boot() {
     console.log('[App] Loading data from Supabase...');
+    await Auth.applyRole();
     await loadFromDB();
-    ImportUI.init();
+    if (Auth.isAdmin()) ImportUI.init();
   }
 
   async function loadFromDB() {

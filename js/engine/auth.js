@@ -47,10 +47,37 @@ const Auth = (() => {
     document.querySelector('.main').style.display = 'none';
   }
 
+  let _role = null;
+
+  async function getRole() {
+    if (_role) return _role;
+    const { data, error } = await getClient()
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', (await getUser()).id)
+      .single();
+    _role = (data && !error) ? data.role : 'viewer';
+    return _role;
+  }
+
+  function isAdmin() { return _role === 'admin'; }
+
   function showApp() {
     document.getElementById('loginScreen').style.display = 'none';
     document.getElementById('sidebar').style.display = '';
     document.querySelector('.main').style.display = '';
+  }
+
+  async function applyRole() {
+    const role = await getRole();
+    const importBtn = document.getElementById('btnImport');
+    const fileInput = document.getElementById('fileImport');
+    if (role !== 'admin') {
+      if (importBtn) importBtn.style.display = 'none';
+      if (fileInput) fileInput.style.display = 'none';
+    } else {
+      if (importBtn) importBtn.style.display = '';
+    }
   }
 
   function initLoginUI() {
@@ -63,17 +90,6 @@ const Auth = (() => {
     const formTitle = document.getElementById('loginTitle');
     const submitLabel = document.getElementById('loginBtnLabel');
 
-    let isSignUp = false;
-
-    toggleLink.addEventListener('click', (e) => {
-      e.preventDefault();
-      isSignUp = !isSignUp;
-      formTitle.textContent = isSignUp ? 'Create Account' : 'Login';
-      submitLabel.textContent = isSignUp ? 'Sign Up' : 'Sign In';
-      toggleLink.textContent = isSignUp ? 'Already have an account? Sign in' : 'Need an account? Sign up';
-      errorEl.textContent = '';
-    });
-
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       errorEl.textContent = '';
@@ -81,20 +97,12 @@ const Auth = (() => {
       submitLabel.textContent = 'Loading...';
 
       try {
-        if (isSignUp) {
-          await signUp(emailInput.value, passInput.value);
-          errorEl.style.color = 'var(--green)';
-          errorEl.textContent = 'Check your email for confirmation link!';
-          submitBtn.disabled = false;
-          submitLabel.textContent = 'Sign Up';
-        } else {
-          await signIn(emailInput.value, passInput.value);
-        }
+        await signIn(emailInput.value, passInput.value);
       } catch (err) {
         errorEl.style.color = 'var(--red)';
         errorEl.textContent = err.message;
         submitBtn.disabled = false;
-        submitLabel.textContent = isSignUp ? 'Sign Up' : 'Sign In';
+        submitLabel.textContent = 'Sign In';
       }
     });
 
@@ -105,5 +113,5 @@ const Auth = (() => {
     }
   }
 
-  return { getSession, getUser, signIn, signUp, signOut, onAuthChange, showLogin, showApp, initLoginUI };
+  return { getSession, getUser, getRole, isAdmin, signIn, signUp, signOut, onAuthChange, showLogin, showApp, applyRole, initLoginUI };
 })();
