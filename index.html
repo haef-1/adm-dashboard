@@ -44,27 +44,36 @@
       <div class="sidebar-header">
         <div class="sidebar-logo">P2</div>
       </div>
+      <div class="sidebar-view-toggle" id="sidebarViewToggle">
+        <button class="view-toggle-btn active" data-mode="chart">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 20V10M12 20V4M6 20V14"/></svg>
+          <span>Chart</span>
+        </button>
+        <button class="view-toggle-btn" data-mode="table">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></svg>
+          <span>Table</span>
+        </button>
+      </div>
       <nav class="sidebar-nav">
-        <div class="nav-group-label">IN CHART</div>
-        <a class="nav-item active" href="#overview" data-page="overview">
+        <a class="nav-item active" href="#overview" data-page="overview" data-page-table="overview-table">
           <span class="nav-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 20V10M12 20V4M6 20V14"/></svg></span><span class="nav-label">Overview</span>
         </a>
-        <a class="nav-item" href="#karkas" data-page="karkas">
+        <a class="nav-item" href="#karkas" data-page="karkas" data-page-table="karkas-table">
           <span class="nav-icon"><img src="images/karkas.png" width="22" height="22" alt="Karkas"></span><span class="nav-label">Karkas</span>
         </a>
-        <a class="nav-item" href="#ayam-utuh" data-page="ayam-utuh">
+        <a class="nav-item" href="#ayam-utuh" data-page="ayam-utuh" data-page-table="ayam-utuh-table">
           <span class="nav-icon"><img src="images/ayam-utuh.png" width="26" height="26" alt="Ayam Utuh"></span><span class="nav-label">Ayam Utuh</span>
         </a>
-        <a class="nav-item" href="#cut-up" data-page="cut-up">
+        <a class="nav-item" href="#cut-up" data-page="cut-up" data-page-table="cut-up-table">
           <span class="nav-icon"><img src="images/cutup.png" width="26" height="26" alt="Cut Up"></span><span class="nav-label">Cut Up</span>
         </a>
-        <a class="nav-item" href="#parting" data-page="parting">
+        <a class="nav-item" href="#parting" data-page="parting" data-page-table="parting-table">
           <span class="nav-icon"><img src="images/parting.png" width="26" height="26" alt="Parting"></span><span class="nav-label">Parting</span>
         </a>
-        <a class="nav-item" href="#boneless" data-page="boneless">
+        <a class="nav-item" href="#boneless" data-page="boneless" data-page-table="boneless-table">
           <span class="nav-icon"><img src="images/boneless.png" width="26" height="26" alt="Boneless"></span><span class="nav-label">Boneless</span>
         </a>
-        <a class="nav-item" href="#mdm" data-page="mdm">
+        <a class="nav-item" href="#mdm" data-page="mdm" data-page-table="mdm-table">
           <span class="nav-icon"><img src="images/mdm.png" width="26" height="26" alt="MDM"></span><span class="nav-label">MDM</span>
         </a>
       </nav>
@@ -181,6 +190,7 @@
 
     <!-- PAGES -->
     <script src="js/pages/overview.js"></script>
+    <script src="js/pages/overview-table.js"></script>
     <script src="js/pages/karkas.js"></script>
 
     <!-- INIT -->

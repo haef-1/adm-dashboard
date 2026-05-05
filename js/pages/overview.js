@@ -10,6 +10,8 @@ const OverviewPage = (() => {
   let chartPeriod = "daily";
   let chartDateRange = [];
   let chartSelectedItems = null;
+  let chartSelectedFrom = null;
+  let chartSelectedTo = null;
   let _rangeDocListener = null;
   let _rangeScrollListener = null;
   let _srDocListener = null;
@@ -353,6 +355,8 @@ const OverviewPage = (() => {
       (val) => {
         chartPeriod = val;
         chartSelectedItems = null;
+        chartSelectedFrom = null;
+        chartSelectedTo = null;
         computeChartRange();
         renderBahanChart();
       },
@@ -504,8 +508,20 @@ const OverviewPage = (() => {
     Charts.buildStackedBar("bahanChart", { labels, datasets });
 
     const navEl = document.getElementById("chartRangeNav");
-    if (navEl && labels.length) {
-      navEl.innerHTML = `<button class="chart-range-btn" id="chartRangeBtn">${labels[0]} – ${labels[labels.length - 1]}</button>`;
+    if (navEl) {
+      let rangeLabel;
+      if (labels.length) {
+        rangeLabel = `${labels[0]} – ${labels[labels.length - 1]}`;
+      } else if (chartSelectedFrom && chartSelectedTo) {
+        const fmtShort = (d) => {
+          const p = d.split("-");
+          return p[2] + " " + MONTH_NAMES[parseInt(p[1])];
+        };
+        rangeLabel = `${fmtShort(chartSelectedFrom)} – ${fmtShort(chartSelectedTo)} (kosong)`;
+      } else {
+        rangeLabel = "Pilih tanggal";
+      }
+      navEl.innerHTML = `<button class="chart-range-btn" id="chartRangeBtn">${rangeLabel}</button>`;
       document
         .getElementById("chartRangeBtn")
         .addEventListener("click", openChartRangePicker);
@@ -613,6 +629,8 @@ const OverviewPage = (() => {
         .addEventListener("click", closeRangePicker);
       popup.querySelector("#rpReset").addEventListener("click", () => {
         chartSelectedItems = null;
+        chartSelectedFrom = null;
+        chartSelectedTo = null;
         closeRangePicker();
         renderBahanChart();
       });
@@ -620,6 +638,8 @@ const OverviewPage = (() => {
         chartSelectedItems = items
           .slice(pickStart, pickEnd + 1)
           .map((i) => i.key);
+        chartSelectedFrom = null;
+        chartSelectedTo = null;
         closeRangePicker();
         renderBahanChart();
       });
@@ -652,7 +672,10 @@ const OverviewPage = (() => {
 
     let fromDate = null,
       toDate = null;
-    if (chartSelectedItems && chartSelectedItems.length) {
+    if (chartSelectedFrom && chartSelectedTo) {
+      fromDate = chartSelectedFrom;
+      toDate = chartSelectedTo;
+    } else if (chartSelectedItems && chartSelectedItems.length) {
       fromDate = chartSelectedItems[0];
       toDate = chartSelectedItems[chartSelectedItems.length - 1];
     } else {
@@ -716,6 +739,8 @@ const OverviewPage = (() => {
         .addEventListener("click", closeRangePicker);
       popup.querySelector("#rpReset").addEventListener("click", () => {
         chartSelectedItems = null;
+        chartSelectedFrom = null;
+        chartSelectedTo = null;
         closeRangePicker();
         renderBahanChart();
       });
@@ -723,9 +748,13 @@ const OverviewPage = (() => {
         if (fromDate && toDate) {
           const f = fromDate <= toDate ? fromDate : toDate;
           const t = fromDate <= toDate ? toDate : fromDate;
+          chartSelectedFrom = f;
+          chartSelectedTo = t;
           chartSelectedItems = dates.filter((d) => d >= f && d <= t);
         } else {
           chartSelectedItems = null;
+          chartSelectedFrom = null;
+          chartSelectedTo = null;
         }
         closeRangePicker();
         renderBahanChart();
@@ -795,15 +824,23 @@ const OverviewPage = (() => {
       }
 
       const daysInMonth = new Date(yr, mo, 0).getDate();
+      const today = new Date();
+      const todayStr =
+        today.getFullYear() +
+        "-" +
+        String(today.getMonth() + 1).padStart(2, "0") +
+        "-" +
+        String(today.getDate()).padStart(2, "0");
       for (let d = 1; d <= daysInMonth; d++) {
         const dateStr = calMonth + "-" + String(d).padStart(2, "0");
-        const available = availSet.has(dateStr);
+        const hasData = availSet.has(dateStr);
+        const isFuture = dateStr > todayStr;
         const inRange = from && to && dateStr >= from && dateStr <= to;
         const isEndpoint = dateStr === fromDate || dateStr === toDate;
 
         // Phase 1: disable dates too far from fromDate
         let tooFar = false;
-        if (available && clickPhase === 1 && fromDate) {
+        if (!isFuture && clickPhase === 1 && fromDate) {
           const diff = Math.round(
             (new Date(dateStr) - new Date(fromDate)) / 86400000,
           );
@@ -813,13 +850,14 @@ const OverviewPage = (() => {
         const cell = document.createElement("div");
         cell.className =
           "range-cal-cell" +
-          (available && !tooFar ? " available" : "") +
+          (!isFuture && !tooFar ? " available" : "") +
+          (!hasData && !isFuture && !tooFar ? " no-data" : "") +
           (inRange ? " in-range" : "") +
           (isEndpoint ? " is-endpoint" : "") +
-          (tooFar && available ? " too-far" : "");
+          (tooFar && !isFuture ? " too-far" : "");
         cell.innerHTML = `<span>${d}</span>`;
 
-        if (available && !tooFar) {
+        if (!isFuture && !tooFar) {
           cell.addEventListener("click", () => {
             if (clickPhase === 0) {
               fromDate = dateStr;

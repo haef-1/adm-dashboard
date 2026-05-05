@@ -44,6 +44,53 @@
   flex-shrink: 0;
 }
 
+.sidebar-view-toggle {
+  display: flex;
+  gap: 2px;
+  padding: 8px 8px 0;
+  flex-shrink: 0;
+}
+
+.view-toggle-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 6px 4px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.view-toggle-btn span {
+  opacity: 0;
+  width: 0;
+  transition: opacity 0.15s ease, width 0.2s ease;
+}
+
+.sidebar:hover .view-toggle-btn span {
+  opacity: 1;
+  width: auto;
+}
+
+.view-toggle-btn.active {
+  background: var(--bg);
+  color: var(--text);
+}
+
+.view-toggle-btn:hover:not(.active) {
+  color: var(--text);
+}
+
 .sidebar-nav {
   flex: 1;
   padding: 12px 10px;

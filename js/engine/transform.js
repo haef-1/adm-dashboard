@@ -491,12 +491,52 @@ const Engine = (() => {
     buildDerivedData();
   }
 
+  // ── Weighted KPI for a date range ──
+  function getKpiForRange(dateArr) {
+    const dateSet = new Set(dateArr);
+    let sumBahan = 0, sumHasil = 0, sumByprod = 0;
+
+    RAW_DB.forEach(r => {
+      if (R_DEPT[r[0]] !== 'KARKAS' || R_PV[r[1]] !== 'AYAM BARU') return;
+      if (!dateSet.has(r[8])) return;
+      const mvt = R_MVT[r[5]];
+      if (mvt === 'BAHAN') sumBahan += r[7];
+      else if (mvt === 'HASIL') sumHasil += r[7];
+      else if (mvt === 'BY PRODUCT') sumByprod += r[7];
+    });
+
+    if (!sumBahan) return { yk: 0, yb: 0, w: 0 };
+    return {
+      yk: Math.round(sumHasil / sumBahan * 10000) / 100,
+      yb: Math.round(sumByprod / sumBahan * 10000) / 100,
+      w: Math.round((1 - (sumHasil + sumByprod) / sumBahan) * 10000) / 100,
+    };
+  }
+
+  // ── Weighted Susut LB for a date range ──
+  function getSusutLBForRange(dateArr) {
+    const dateSet = new Set(dateArr);
+    let susutMinus = 0, susutPlus = 0, bahanLB = 0;
+
+    RAW_DB.forEach(r => {
+      if (R_DEPT[r[0]] !== 'KARKAS') return;
+      if (!dateSet.has(r[8]) || R_SLOC[r[9]] !== 'LIVEBIRD') return;
+      const mvt = R_MVT[r[5]];
+      if (mvt === 'BAHAN') bahanLB += r[7];
+      else if (mvt === 'SUSUT (-)' || mvt === 'SUSUT ( )') susutMinus += r[7];
+      else if (mvt === 'SUSUT (+)') susutPlus += r[7];
+    });
+
+    if (!bahanLB) return null;
+    return Math.round((susutMinus - susutPlus) / bahanLB * 10000) / 100;
+  }
+
   return {
     setLookups, growLookup, setRawDB, appendRows, getRawDB, getYieldData, getAllRaw, getLookups,
     rRow, buildDerivedData, avgWeighted,
     getAvailableDates, getLastDate, getAvailableMonths,
     getKpiForDate, getTruckForDate, getTruckDelta,
-    getSusutLBForDate, getTruckCalendar,
+    getSusutLBForDate, getSusutLBForRange, getKpiForRange, getTruckCalendar,
     getBahanDistribution, getByProductForDate,
     searchMaterial, calcMaterialValue, getMaterialFilterOptions, materialMatchesFilter,
     calcMaterialValueRange, getMaterialFilterOptionsRange, materialMatchesFilterRange,
