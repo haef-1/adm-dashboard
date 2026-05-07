@@ -3,6 +3,20 @@
    Ported from adm_dashboard_v3_trial
    ═══════════════════════════════════════ */
 
+// roundRect polyfill — not available in Chrome <99, Samsung Internet <18, older WebViews
+if (typeof CanvasRenderingContext2D !== 'undefined' && !CanvasRenderingContext2D.prototype.roundRect) {
+  CanvasRenderingContext2D.prototype.roundRect = function(x, y, w, h, radii) {
+    var r = typeof radii === 'number' ? radii : (Array.isArray(radii) ? radii[0] : 0);
+    r = Math.min(r, w / 2, h / 2);
+    this.moveTo(x + r, y);
+    this.arcTo(x + w, y, x + w, y + h, r);
+    this.arcTo(x + w, y + h, x, y + h, r);
+    this.arcTo(x, y + h, x, y, r);
+    this.arcTo(x, y, x + w, y, r);
+    this.closePath();
+  };
+}
+
 const KarkasPage = (() => {
   // ═══════════════════════════════════════
   //  SHARED
@@ -677,8 +691,9 @@ const KarkasPage = (() => {
     const grandTotal = Object.values(deptTotals).reduce((a, b) => a + b, 0);
     const activeDepts = DEPTS.filter(d => deptTotals[d] > 0);
 
-    const ELEM_GAP = 4, ELEM_MAX = 80, TEXT_MIN = 22;
-    const TOP = 16, PAD_L = 118, PAD_R = 110, NODE_W = 6;
+    const mob = CW < 460;
+    const ELEM_GAP = 4, ELEM_MAX = mob ? 60 : 80, TEXT_MIN = mob ? 18 : 22;
+    const TOP = 16, PAD_L = mob ? 84 : 118, PAD_R = mob ? 84 : 110, NODE_W = 6;
     const innerW = CW - PAD_L - PAD_R;
 
     sCanvas.width = CW * DPR; sCanvas.height = 10 * DPR; sCanvas.style.height = '10px';
@@ -690,7 +705,7 @@ const KarkasPage = (() => {
 
     const gradeNodeH = {}, deptNodeH = {};
     GRADES.forEach(g => { gradeNodeH[g] = Math.max(TEXT_MIN, (gradeTotals[g] / maxGradeVal) * ELEM_MAX); });
-    const DEPT_TEXT_MIN = d => d === 'BONELESS BONGKAR' ? 36 : TEXT_MIN;
+    const DEPT_TEXT_MIN = d => d === 'BONELESS BONGKAR' ? (mob ? 30 : 36) : TEXT_MIN;
     activeDepts.forEach(d => { deptNodeH[d] = Math.max(DEPT_TEXT_MIN(d), (deptTotals[d] / maxDeptVal) * ELEM_MAX); });
 
     const totalGradeH = GRADES.reduce((s, g) => s + gradeNodeH[g], 0) + (GRADES.length - 1) * ELEM_GAP;
@@ -774,7 +789,7 @@ const KarkasPage = (() => {
 
     if (hasSel) {
       const x0 = PAD_L + NODE_W, x1 = PAD_L + innerW - NODE_W;
-      const LSUFFIX = 9;
+      const LSUFFIX = mob ? 8 : 9;
 
       function drawPill(text, pillCx, pillCy, rgb, bgAlpha) {
         ctx.save();
@@ -830,6 +845,9 @@ const KarkasPage = (() => {
     }
 
     // Grade nodes
+    const gFontSz = mob ? 9 : 11;
+    const gValSz = mob ? 9 : 10;
+    const gBw = mob ? 66 : 108, gBh = mob ? 20 : 22;
     GRADES.forEach(g => {
       const cy = gradeY[g], nh = gradeNodeH[g], val = gradeTotals[g];
       const isSel = sSelected.type === 'grade' && sSelected.key === g;
@@ -838,21 +856,24 @@ const KarkasPage = (() => {
       ctx.shadowColor = isSel ? 'rgba(0,0,0,0.3)' : 'transparent'; ctx.shadowBlur = isSel ? 8 : 0;
       ctx.fillStyle = isSel ? getCSSVar('--text') : isConn ? getCSSVar('--text-mid') : dimmed ? '#ccc' : '#999';
       ctx.beginPath(); ctx.roundRect(PAD_L - NODE_W, gradeBarY[g] - nh / 2, NODE_W, nh, 2); ctx.fill(); ctx.shadowBlur = 0;
-      const bw = 108, bh = 22, bx = PAD_L - NODE_W - bw - 6;
+      const bx = PAD_L - NODE_W - gBw - 6;
       ctx.fillStyle = (isSel || isConn) ? '#f0f2f7' : '#f8f9fc';
       ctx.strokeStyle = isSel ? getCSSVar('--text-soft') : isConn ? getCSSVar('--text-muted') : getCSSVar('--border');
       ctx.lineWidth = (isSel || isConn) ? 1.5 : 1;
-      ctx.beginPath(); ctx.roundRect(bx, cy - bh / 2, bw, bh, 5); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.roundRect(bx, cy - gBh / 2, gBw, gBh, 5); ctx.fill(); ctx.stroke();
       ctx.fillStyle = isSel ? getCSSVar('--text') : isConn ? getCSSVar('--text') : dimmed ? '#ccc' : getCSSVar('--text-mid');
-      ctx.font = 'bold 11px "Plus Jakarta Sans", sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      ctx.font = 'bold ' + gFontSz + 'px "Plus Jakarta Sans", sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
       ctx.fillText(g + ' kg', bx + 7, cy);
       ctx.fillStyle = isSel ? '#10b981' : isConn ? '#10b981' : dimmed ? '#ccc' : '#999';
-      ctx.font = '10px "JetBrains Mono", monospace'; ctx.textAlign = 'right';
-      ctx.fillText(fmtShort(val, sMetric), bx + bw - 6, cy);
+      ctx.font = gValSz + 'px "JetBrains Mono", monospace'; ctx.textAlign = 'right';
+      ctx.fillText(fmtShort(val, sMetric), bx + gBw - 6, cy);
       ctx.textBaseline = 'alphabetic';
     });
 
     // Dept nodes
+    const dFontSz = mob ? 10 : 12;
+    const dValSz = mob ? 9 : 10;
+    const dPad = mob ? 6 : 8;
     activeDepts.forEach(d => {
       const cy = deptY[d], nh = deptNodeH[d], val = deptTotals[d], col = DEPT_COLOR[d];
       const { r, g, b } = hexRgb(col);
@@ -865,27 +886,30 @@ const KarkasPage = (() => {
       ctx.fillStyle = col;
       ctx.beginPath(); ctx.roundRect(x, deptBarY[d] - nh / 2, NODE_W, nh, 2); ctx.fill(); ctx.shadowBlur = 0;
       ctx.fillStyle = isSel ? col : isConn ? col : '#888';
-      ctx.font = 'bold 12px "Plus Jakarta Sans", sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      ctx.font = 'bold ' + dFontSz + 'px "Plus Jakarta Sans", sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      const dLabelX = x + NODE_W + dPad;
       if (d === 'BONELESS BONGKAR') {
-        ctx.fillText('BONELESS', x + NODE_W + 8, cy - 7.2);
-        ctx.fillText('BONGKAR', x + NODE_W + 8, cy + 7.2);
+        ctx.fillText('BONELESS', dLabelX, cy - 7.2);
+        ctx.fillText('BONGKAR', dLabelX, cy + 7.2);
+      } else if (mob && d === 'BONELESS MIX') {
+        ctx.fillText('BL.MIX', dLabelX, cy - 7);
       } else {
-        ctx.fillText(d, x + NODE_W + 8, cy - 7);
+        ctx.fillText(d, dLabelX, cy - 7);
       }
       ctx.fillStyle = isSel ? 'rgba(' + r + ',' + g + ',' + b + ',0.9)' : isConn ? 'rgba(' + r + ',' + g + ',' + b + ',0.7)' : '#999';
-      ctx.font = '10px "JetBrains Mono", monospace';
-      ctx.fillText(fmtShort(val, sMetric), x + NODE_W + 8, d === 'BONELESS BONGKAR' ? cy + 21 : cy + 8);
+      ctx.font = dValSz + 'px "JetBrains Mono", monospace';
+      ctx.fillText(fmtShort(val, sMetric), dLabelX, d === 'BONELESS BONGKAR' ? cy + 21 : cy + 8);
       ctx.globalAlpha = 1;
       if (isSel || isConn) {
         const pct = (val / grandTotal * 100).toFixed(1) + '%';
         ctx.fillStyle = 'rgba(' + r + ',' + g + ',' + b + ',0.1)';
-        ctx.font = (isSel ? 'bold ' : '') + '10px "JetBrains Mono", monospace';
+        ctx.font = (isSel ? 'bold ' : '') + dValSz + 'px "JetBrains Mono", monospace';
         const pw = ctx.measureText(pct).width + 10;
         const pctOffY = d === 'BONELESS BONGKAR' ? cy + 32 : cy + 19;
-        ctx.beginPath(); ctx.roundRect(x + NODE_W + 8, pctOffY, pw, 16, 4); ctx.fill();
+        ctx.beginPath(); ctx.roundRect(dLabelX, pctOffY, pw, 16, 4); ctx.fill();
         ctx.fillStyle = isSel ? col : 'rgba(' + r + ',' + g + ',' + b + ',0.8)';
         ctx.textAlign = 'left';
-        ctx.fillText(pct, x + NODE_W + 13, d === 'BONELESS BONGKAR' ? cy + 40 : cy + 27);
+        ctx.fillText(pct, dLabelX + 5, d === 'BONELESS BONGKAR' ? cy + 40 : cy + 27);
       }
       ctx.textBaseline = 'alphabetic';
     });

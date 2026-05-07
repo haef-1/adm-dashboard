@@ -1168,6 +1168,11 @@
   .y-card-header { padding: 6px 12px 0; }
   .y-chart-wrap { height: 120px; margin: 0 12px 4px; }
   .section-header-controls { flex-wrap: wrap; gap: 6px; }
+  .sankey-body { padding: 12px 6px; }
+  .s-axis-labels { padding: 0 4px; }
+  .s-legend { gap: 6px; padding: 8px 0 4px; }
+  .s-leg { font-size: 10px; padding: 3px 6px; gap: 4px; }
+  .s-leg-dot { width: 7px; height: 7px; }
 }
 
 /* ── Filter row ── */
