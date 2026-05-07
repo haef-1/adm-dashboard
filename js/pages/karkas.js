@@ -692,7 +692,7 @@ const KarkasPage = (() => {
     const activeDepts = DEPTS.filter(d => deptTotals[d] > 0);
 
     const mob = CW < 460;
-    const ELEM_GAP = 4, ELEM_MAX = mob ? 60 : 80, TEXT_MIN = mob ? 18 : 22;
+    const ELEM_GAP = mob ? 6 : 4, ELEM_MAX = mob ? 60 : 80, TEXT_MIN = 22;
     const TOP = 16, PAD_L = mob ? 84 : 118, PAD_R = mob ? 84 : 110, NODE_W = 6;
     const innerW = CW - PAD_L - PAD_R;
 
