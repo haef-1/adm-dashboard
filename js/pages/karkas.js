@@ -693,7 +693,7 @@ const KarkasPage = (() => {
 
     const mob = CW < 460;
     const ELEM_GAP = mob ? 6 : 4, ELEM_MAX = mob ? 60 : 80, TEXT_MIN = 22;
-    const TOP = 16, PAD_L = mob ? 84 : 118, PAD_R = mob ? 84 : 110, NODE_W = 6;
+    const TOP = 16, PAD_L = mob ? 84 : 122, PAD_R = mob ? 84 : 110, NODE_W = 6;
     const innerW = CW - PAD_L - PAD_R;
 
     sCanvas.width = CW * DPR; sCanvas.height = 10 * DPR; sCanvas.style.height = '10px';
@@ -846,8 +846,8 @@ const KarkasPage = (() => {
 
     // Grade nodes
     const gFontSz = mob ? 9 : 11;
-    const gValSz = mob ? 9 : 10;
-    const gBw = mob ? 66 : 108, gBh = mob ? 20 : 22;
+    const gValSz = mob ? 8 : 10;
+    const gBw = mob ? 72 : 108, gBh = mob ? 20 : 22;
     GRADES.forEach(g => {
       const cy = gradeY[g], nh = gradeNodeH[g], val = gradeTotals[g];
       const isSel = sSelected.type === 'grade' && sSelected.key === g;
@@ -863,7 +863,7 @@ const KarkasPage = (() => {
       ctx.beginPath(); ctx.roundRect(bx, cy - gBh / 2, gBw, gBh, 5); ctx.fill(); ctx.stroke();
       ctx.fillStyle = isSel ? getCSSVar('--text') : isConn ? getCSSVar('--text') : dimmed ? '#ccc' : getCSSVar('--text-mid');
       ctx.font = 'bold ' + gFontSz + 'px "Plus Jakarta Sans", sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-      ctx.fillText(g + ' kg', bx + 7, cy);
+      ctx.fillText(mob ? g : g + ' kg', bx + 7, cy);
       ctx.fillStyle = isSel ? '#10b981' : isConn ? '#10b981' : dimmed ? '#ccc' : '#999';
       ctx.font = gValSz + 'px "JetBrains Mono", monospace'; ctx.textAlign = 'right';
       ctx.fillText(fmtShort(val, sMetric), bx + gBw - 6, cy);
