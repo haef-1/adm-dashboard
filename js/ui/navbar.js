@@ -14,26 +14,22 @@ const Navbar = (() => {
       });
     });
 
-    // View toggle
-    document.querySelectorAll('.view-toggle-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        viewMode = btn.dataset.mode;
-        document.querySelectorAll('.view-toggle-btn').forEach(b => b.classList.toggle('active', b === btn));
-
-        // Re-navigate active item in new mode
-        const activeItem = document.querySelector('.nav-item.active');
-        if (activeItem) {
-          const page = viewMode === 'table' ? activeItem.dataset.pageTable : activeItem.dataset.page;
-          navigateTo(page);
-        }
-      });
+    // View toggle dropdown
+    const viewSelect = document.getElementById('viewModeSelect');
+    viewSelect.addEventListener('change', () => {
+      viewMode = viewSelect.value;
+      const activeItem = document.querySelector('.nav-item.active');
+      if (activeItem) {
+        const page = viewMode === 'table' ? activeItem.dataset.pageTable : activeItem.dataset.page;
+        navigateTo(page);
+      }
     });
 
     // Handle hash on load
     const hash = location.hash.slice(1) || 'overview';
     if (hash.endsWith('-table')) {
       viewMode = 'table';
-      document.querySelectorAll('.view-toggle-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === 'table'));
+      viewSelect.value = 'table';
     }
     navigateTo(hash);
   }

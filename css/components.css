@@ -577,6 +577,7 @@
 
 .search-material-wrap {
   position: relative;
+  width: 100%;
 }
 
 .search-material-icon {
@@ -628,6 +629,12 @@
 .search-ac-desc {
   flex: 1;
   min-width: 0;
+  cursor: pointer;
+}
+
+.search-ac-desc:hover {
+  color: var(--blue);
+  text-decoration: underline;
 }
 
 .search-ac-code {
@@ -730,9 +737,35 @@
   opacity: 1;
 }
 
-.material-tags-clear-all {
+.material-tags-clear-dimmed {
   margin-left: auto;
   align-self: flex-end;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--font-body);
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity var(--transition), border-color var(--transition), color var(--transition);
+}
+
+.material-tags-clear-dimmed:hover {
+  opacity: 1;
+  border-color: var(--text-muted);
+  color: var(--text);
+}
+
+.material-tags-clear-dimmed + .material-tags-clear-all {
+  margin-left: 0;
+}
+
+.material-tags-clear-all {
+  align-self: flex-end;
+  margin-left: auto;
   padding: 3px 10px;
   font-size: 11px;
   font-weight: 600;
@@ -1645,6 +1678,10 @@
   overflow: hidden;
 }
 
+.table-section:last-child {
+  margin-bottom: 240px;
+}
+
 .table-section-header {
   display: flex;
   align-items: center;
@@ -1705,6 +1742,7 @@
   width: 100%;
   border-collapse: collapse;
   font-size: 12px;
+  table-layout: fixed;
 }
 
 .data-table th {
@@ -1715,12 +1753,41 @@
   letter-spacing: 0.04em;
   color: var(--text-muted);
   background: var(--bg);
-  padding: 10px 16px;
+  padding: 10px 12px;
   text-align: left;
-  white-space: nowrap;
+  white-space: normal;
+  word-wrap: break-word;
   border-bottom: 1px solid var(--border);
   position: sticky;
   top: 0;
+}
+
+.data-table th:first-child {
+  width: 22%;
+}
+
+@media (max-width: 600px) {
+  .data-table {
+    font-size: 10px;
+  }
+  .data-table th {
+    padding: 8px 6px;
+    font-size: 9px;
+    letter-spacing: 0;
+  }
+  .data-table td {
+    padding: 8px 6px;
+  }
+  .data-table th:first-child {
+    width: 26%;
+  }
+  .smt-mat-cell {
+    font-size: 9px;
+  }
+}
+
+#bhnTableWrap .data-table th:nth-child(5) {
+  width: 14%;
 }
 
 .data-table th.sortable {
@@ -1746,10 +1813,13 @@
 }
 
 .data-table td {
-  padding: 10px 16px;
+  padding: 10px 12px;
   border-bottom: 1px solid var(--border-light);
   color: var(--text);
-  white-space: nowrap;
+  white-space: normal;
+  word-wrap: break-word;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .data-table tbody tr.row-latest {
@@ -1774,4 +1844,70 @@
   color: var(--text-muted);
   padding: 40px 20px;
   font-size: 13px;
+}
+
+/* ── Search Material Table (SMT) ── */
+.table-section:has(.smt-search-bar) {
+  overflow: visible;
+}
+
+.smt-search-bar {
+  padding: 14px 16px 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.smt-table {
+  table-layout: auto;
+}
+
+.smt-table th:first-child,
+.smt-table td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--surface);
+}
+
+.smt-table thead th:first-child {
+  background: var(--bg);
+  z-index: 3;
+}
+
+.smt-mat-cell {
+  white-space: nowrap;
+  font-weight: 600;
+  font-size: 11px;
+}
+
+.smt-total-row {
+  background: var(--bg);
+  border-top: 2px solid var(--border);
+}
+
+.smt-total-row td {
+  font-weight: 700;
+  color: var(--text);
+}
+
+.smt-table th {
+  white-space: nowrap;
+  text-align: right;
+}
+
+.smt-table th:first-child {
+  text-align: left;
+}
+
+.smt-table td {
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.smt-table td:first-child {
+  text-align: left;
+  font-family: var(--font-body);
+  white-space: nowrap;
 }

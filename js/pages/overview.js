@@ -1002,9 +1002,9 @@ const OverviewPage = (() => {
       selectAllChk.checked = allChecked;
       selectAllChk.indeterminate = !allChecked && someChecked;
 
-      // Item click — toggle selection
+      // Checkbox click — toggle selection
       acList.querySelectorAll(".search-ac-item[data-idx]").forEach((item) => {
-        item.addEventListener("click", (e) => {
+        item.querySelector(".search-ac-checkbox").addEventListener("click", (e) => {
           e.stopPropagation();
           const idx = parseInt(item.dataset.idx);
           const r = _acResults.find((x) => x.idx === idx);
@@ -1013,6 +1013,18 @@ const OverviewPage = (() => {
           if (i >= 0) selectedMaterials.splice(i, 1);
           else selectedMaterials.push(r);
           renderAcList();
+          renderSearchResult();
+        });
+        // Label click — select only this material
+        item.querySelector(".search-ac-desc").addEventListener("click", (e) => {
+          e.stopPropagation();
+          const idx = parseInt(item.dataset.idx);
+          const r = _acResults.find((x) => x.idx === idx);
+          if (!r) return;
+          selectedMaterials.length = 0;
+          selectedMaterials.push(r);
+          acList.classList.remove("show");
+          input.value = "";
           renderSearchResult();
         });
       });
@@ -1454,6 +1466,7 @@ const OverviewPage = (() => {
     updateSearchFilterOptions();
 
     // Render tags (dimmed if not matching filter)
+    const hasDimmed = selectedMaterials.some(m => !Engine.materialMatchesFilterRange(m.idx, searchFilters, dates));
     tagsEl.innerHTML =
       selectedMaterials
         .map((m, i) => {
@@ -1468,6 +1481,7 @@ const OverviewPage = (() => {
       </span>`;
         })
         .join("") +
+      (hasDimmed ? `<button class="material-tags-clear-dimmed" id="matClearDimmed">Clear Unmatched</button>` : "") +
       `<button class="material-tags-clear-all" id="matClearAll">Clear All</button>`;
 
     tagsEl.querySelectorAll(".material-tag-remove").forEach((btn) => {
@@ -1475,10 +1489,43 @@ const OverviewPage = (() => {
         e.stopPropagation();
         const idx = parseInt(btn.dataset.i);
         selectedMaterials.splice(idx, 1);
-        searchFilters = { dept: "All", pv: "All", mvt: "All" };
+        if (selectedMaterials.length) {
+          const indices = selectedMaterials.map(m => m.idx);
+          const d = getSearchDates();
+          const opts = Engine.getMaterialFilterOptionsRange(indices, d, { dept: "All", pv: "All", mvt: "All" });
+          if (searchFilters.dept !== "All" && !opts.depts.includes(searchFilters.dept)) {
+            searchFilters.dept = "All";
+            searchFilters.pv = "All";
+            searchFilters.mvt = "All";
+          } else {
+            const opts2 = Engine.getMaterialFilterOptionsRange(indices, d, searchFilters);
+            if (searchFilters.pv !== "All" && !opts2.pvs.includes(searchFilters.pv)) {
+              searchFilters.pv = "All";
+              searchFilters.mvt = "All";
+            } else if (searchFilters.mvt !== "All" && !opts2.mvts.includes(searchFilters.mvt)) {
+              searchFilters.mvt = "All";
+            }
+          }
+        } else {
+          searchFilters = { dept: "All", pv: "All", mvt: "All" };
+        }
         renderSearchResult();
       });
     });
+
+    const clearDimmedBtn = document.getElementById("matClearDimmed");
+    if (clearDimmedBtn) {
+      clearDimmedBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const d = getSearchDates();
+        for (let i = selectedMaterials.length - 1; i >= 0; i--) {
+          if (!Engine.materialMatchesFilterRange(selectedMaterials[i].idx, searchFilters, d)) {
+            selectedMaterials.splice(i, 1);
+          }
+        }
+        renderSearchResult();
+      });
+    }
 
     document.getElementById("matClearAll").addEventListener("click", (e) => {
       e.stopPropagation();
