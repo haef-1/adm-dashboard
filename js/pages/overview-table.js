@@ -259,14 +259,15 @@ const OverviewTablePage = (() => {
         : dates.slice(-7);
       range.forEach(d => {
         const kpi = Engine.getKpiForDate(d);
+        if (!kpi) return;
         const susut = Engine.getSusutLBForDate(d);
         const parts = d.split("-");
         rows.push({
           date: d,
           label: parts[2] + " " + MONTH_NAMES[parseInt(parts[1])] + " " + parts[0],
-          yk: kpi ? kpi.yk : 0,
-          yb: kpi ? kpi.yb : 0,
-          w: kpi ? kpi.w : 0,
+          yk: kpi.yk,
+          yb: kpi.yb,
+          w: kpi.w,
           susut: susut !== null ? susut : 0,
         });
       });
