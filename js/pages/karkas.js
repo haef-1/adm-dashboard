@@ -168,41 +168,27 @@ const KarkasPage = (() => {
       </div>
     `;
 
-    // Inject yield cards
+    // Inject unified yield chart
     document.getElementById('yCardsContainer').innerHTML = `
-      <div class="y-card" style="--card-accent:#4d9eff">
-        <div class="y-card-header">
-          <div class="y-card-title-block">
-            <div class="y-card-title">Yield Karkas</div>
-            <div class="y-card-avg" id="avg-karkas"></div>
-          </div>
-          <div class="y-live-block"><div class="y-live-num idle" id="lv-karkas">--%</div></div>
+      <div class="y-stats-row">
+        <div class="y-stat">
+          <div class="y-stat-label">Karkas</div>
+          <div class="y-stat-val" id="lv-karkas">--%</div>
+          <div class="y-stat-avg" id="avg-karkas"></div>
         </div>
-        <div class="y-chart-date-label" id="dl-karkas"><span></span></div>
-        <div class="y-chart-wrap"><canvas id="chart-karkas"></canvas></div>
-      </div>
-      <div class="y-card" style="--card-accent:#34d399">
-        <div class="y-card-header">
-          <div class="y-card-title-block">
-            <div class="y-card-title">Yield By-Product</div>
-            <div class="y-card-avg" id="avg-bypro"></div>
-          </div>
-          <div class="y-live-block"><div class="y-live-num idle" id="lv-bypro">--%</div></div>
+        <div class="y-stat">
+          <div class="y-stat-label">By-Pro</div>
+          <div class="y-stat-val" id="lv-bypro">--%</div>
+          <div class="y-stat-avg" id="avg-bypro"></div>
         </div>
-        <div class="y-chart-date-label" id="dl-bypro"><span></span></div>
-        <div class="y-chart-wrap"><canvas id="chart-bypro"></canvas></div>
-      </div>
-      <div class="y-card" style="--card-accent:#e05252">
-        <div class="y-card-header">
-          <div class="y-card-title-block">
-            <div class="y-card-title">Waste</div>
-            <div class="y-card-avg" id="avg-waste"></div>
-          </div>
-          <div class="y-live-block"><div class="y-live-num idle" id="lv-waste">--%</div></div>
+        <div class="y-stat">
+          <div class="y-stat-label">Waste</div>
+          <div class="y-stat-val" id="lv-waste">--%</div>
+          <div class="y-stat-avg" id="avg-waste"></div>
         </div>
-        <div class="y-chart-date-label" id="dl-waste"><span></span></div>
-        <div class="y-chart-wrap"><canvas id="chart-waste"></canvas></div>
       </div>
+      <div class="y-chart-date-label" id="dl-yield"><span></span></div>
+      <div class="y-chart-wrap"><canvas id="chart-yield"></canvas></div>
     `;
 
     // Yield header controls
@@ -334,184 +320,224 @@ const KarkasPage = (() => {
     const fd = yFilterData();
     yChartRegistry = [];
 
-    yDEFS.forEach(({ id, key, line, line2 }) => {
-      const values = fd.map(r => r[key]);
-      if (!values.length) return;
+    Object.keys(yChartInstances).forEach(k => { if (yChartInstances[k] && yChartInstances[k].destroy) yChartInstances[k].destroy(); });
+    yChartInstances = {};
 
-      const av = Engine.avgWeighted(fd, key);
-      const dataMin = Math.min(...values);
-      const dataMax = Math.max(...values);
-      const dataRange = dataMax - dataMin || 0.5;
-      const niceSteps = [0.1, 0.2, 0.5, 1, 2, 5];
-      let step = 1;
-      for (const s of niceSteps) {
-        const ticks = Math.ceil(dataRange / s) + 3;
-        if (ticks >= 4 && ticks <= 7) { step = s; break; }
-        step = s;
-      }
-      const min = Math.floor((dataMin - step) / step) * step;
-      const max = Math.ceil((dataMax + step) / step) * step;
+    if (!fd.length) return;
 
-      const numEl = document.getElementById('lv-' + id);
-      const avgEl = document.getElementById('avg-' + id);
-      const dlWrap = document.getElementById('dl-' + id);
+    const metrics = yDEFS.map(({ id, key, line, line2 }) => ({
+      id, key, line, line2,
+      values: fd.map(r => r[key]),
+      av: Engine.avgWeighted(fd, key)
+    }));
 
-      dlWrap.innerHTML = '';
-      const dlSpan = document.createElement('span');
-      dlWrap.appendChild(dlSpan);
-
-      if (avgEl) {
-        avgEl.textContent = 'Avg ' + av.toFixed(2) + '%';
-        avgEl.style.color = line;
-        avgEl.style.background = line + '22';
-      }
-      numEl.style.color = line;
-      numEl.textContent = '--%';
-      numEl.classList.add('idle');
-
-      const chartCanvas = document.getElementById('chart-' + id);
-      const chartCtx = chartCanvas.getContext('2d');
-      if (yChartInstances[id]) yChartInstances[id].destroy();
-
-      let xLabels, fullLabels;
-      if (yPeriod === 'daily') {
-        xLabels = fd.map((r, i) => {
-          const mm = parseInt(r.d.split('-')[0], 10);
-          const prev = i > 0 ? parseInt(fd[i-1].d.split('-')[0], 10) : null;
-          return mm !== prev ? MONTHS_SHORT[mm - 1] : '';
-        });
-        fullLabels = fd.map(r => {
-          const [mm, dd] = r.d.split('-');
-          return dd + ' ' + MONTHS_SHORT[parseInt(mm, 10) - 1];
-        });
-      } else {
-        xLabels = fd.map(r => r.d);
-        fullLabels = fd.map(r => r.d);
-      }
-
-      function makeGrad(ctx) {
-        const g = ctx.createLinearGradient(0, 0, 0, 220);
-        g.addColorStop(0, line + '55'); g.addColorStop(0.5, line + '18'); g.addColorStop(1, line + '00');
-        return g;
-      }
-
-      const avgPlugin = {
-        id: 'avgLine_' + id,
-        beforeDraw(ch) {
-          const { ctx: c, chartArea: { left, right }, scales: { y } } = ch;
-          if (!y) return;
-          const yp = y.getPixelForValue(av);
-          c.save(); c.strokeStyle = line2 + '55'; c.lineWidth = 1; c.setLineDash([5, 5]);
-          c.beginPath(); c.moveTo(left, yp); c.lineTo(right, yp); c.stroke();
-          c.setLineDash([]); c.restore();
-        }
-      };
-
-      const peakBottomPlugin = {
-        id: 'peakBottom_' + id,
-        afterDatasetsDraw(ch) {
-          const { ctx: c, chartArea, scales: { y } } = ch;
-          if (!chartArea || !y) return;
-          const { left, right } = chartArea;
-          const vals = ch.data.datasets[0].data;
-          if (!vals || !vals.length) return;
-          const maxVal = Math.max(...vals), minVal = Math.min(...vals);
-          const maxIdx = vals.indexOf(maxVal), minIdx = vals.indexOf(minVal);
-          const stp = vals.length > 1 ? (right - left) / (vals.length - 1) : 0;
-          c.save();
-          c.font = 'bold 9px "JetBrains Mono", monospace';
-          function drawLabel(idx, val, isTop) {
-            const xp = left + idx * stp;
-            const yp2 = y.getPixelForValue(val);
-            const txt = val.toFixed(2);
-            const tw = c.measureText(txt).width;
-            const cx2 = Math.max(left + tw / 2, Math.min(right - tw / 2, xp));
-            const cy = isTop ? Math.max(chartArea.top - 2, yp2 - 9) : Math.min(chartArea.bottom - 8, yp2 + 9);
-            c.fillStyle = line; c.textAlign = 'center'; c.textBaseline = 'middle';
-            c.fillText(txt, cx2, cy);
-          }
-          drawLabel(maxIdx, maxVal, true);
-          if (maxIdx !== minIdx) drawLabel(minIdx, minVal, false);
-          c.restore();
-        }
-      };
-
-      const chart = new Chart(chartCtx, {
-        type: 'line',
-        data: { labels: xLabels, datasets: [{ data: values, borderColor: line, borderWidth: 1.8, backgroundColor: makeGrad(chartCtx), fill: true, tension: 0.1, pointRadius: 0, pointHoverRadius: 0, clip: false }] },
-        plugins: [avgPlugin, peakBottomPlugin],
-        options: {
-          responsive: true, maintainAspectRatio: false,
-          animation: { duration: 820, easing: 'easeInOutQuart' },
-          events: [],
-          layout: { padding: { top: 14, bottom: 8, left: 0, right: 0 } },
-          plugins: { legend: { display: false }, tooltip: { enabled: false } },
-          scales: {
-            x: { grid: { display: false }, border: { display: false }, ticks: { color: getCSSVar('--text-muted'), font: { family: 'JetBrains Mono', size: 9, weight: '600' }, maxRotation: 0, padding: 0, autoSkip: yPeriod !== 'daily' } },
-            y: { position: 'right', min, max, grid: { color: getCSSVar('--border-light'), lineWidth: 1 }, border: { display: false }, ticks: { color: getCSSVar('--text-muted'), font: { family: 'JetBrains Mono', size: 9, weight: '600' }, callback: v => v.toFixed(1) + '%', maxTicksLimit: 8, stepSize: step, padding: 2 } }
-          }
-        }
-      });
-      yChartInstances[id] = chart;
-
-      // Overlay for crosshair
-      const wrap = chartCanvas.parentElement;
-      wrap.style.position = 'relative';
-      wrap.querySelector('canvas.y-overlay')?.remove();
-      const over = document.createElement('canvas');
-      over.className = 'y-overlay';
-      over.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;';
-      wrap.appendChild(over);
-      function syncSize() { over.width = chartCanvas.width; over.height = chartCanvas.height; }
-      syncSize();
-      new ResizeObserver(syncSize).observe(chartCanvas);
-      const oc = over.getContext('2d');
-
-      let chartReady = false;
-      setTimeout(() => { chartReady = true; const lastIdx = values.length - 1; yChartRegistry.forEach(fn => fn(lastIdx)); }, 840);
-
-      function drawAtIndex(si) {
-        const ca = chart.chartArea; if (!ca) return;
-        const safeIdx = Math.max(0, Math.min(values.length - 1, si));
-        if (values[safeIdx] === undefined) return;
-        const stp2 = values.length > 1 ? (ca.right - ca.left) / (values.length - 1) : 0;
-        const xp = values.length > 1 ? ca.left + safeIdx * stp2 : (ca.left + ca.right) / 2;
-        const yp = chart.scales.y.getPixelForValue(values[safeIdx]);
-        const dpr = window.devicePixelRatio || 1;
-        oc.clearRect(0, 0, over.width, over.height);
-        oc.save();
-        oc.strokeStyle = 'rgba(0,0,0,0.15)'; oc.lineWidth = 1 * dpr; oc.setLineDash([4 * dpr, 4 * dpr]);
-        oc.beginPath(); oc.moveTo(xp * dpr, ca.top * dpr); oc.lineTo(xp * dpr, ca.bottom * dpr); oc.stroke(); oc.setLineDash([]);
-        oc.beginPath(); oc.arc(xp * dpr, yp * dpr, 3 * dpr, 0, Math.PI * 2);
-        oc.fillStyle = getCSSVar('--text'); oc.fill(); oc.strokeStyle = line; oc.lineWidth = 1.5 * dpr; oc.stroke();
-        oc.restore();
-        const rect = chartCanvas.getBoundingClientRect();
-        const dlRect = dlWrap.getBoundingClientRect();
-        dlSpan.textContent = fullLabels[safeIdx]; dlSpan.style.left = (rect.left - dlRect.left + xp) + 'px';
-        numEl.textContent = values[safeIdx].toFixed(2) + '%'; numEl.classList.remove('idle');
-      }
-      yChartRegistry.push(drawAtIndex);
-
-      function getIdx(mouseX) {
-        const ca = chart.chartArea; if (!ca) return 0;
-        if (values.length <= 1) return 0;
-        return Math.max(0, Math.min(values.length - 1, Math.round((mouseX - ca.left) / ((ca.right - ca.left) / (values.length - 1)))));
-      }
-      if (wrap._yMouse) wrap.removeEventListener('mousemove', wrap._yMouse);
-      if (wrap._yTouch) wrap.removeEventListener('touchmove', wrap._yTouch);
-      wrap._yMouse = e => {
-        if (!chartReady) return;
-        const mouseX = e.clientX - chartCanvas.getBoundingClientRect().left;
-        if (!yGlobalRafPending) { yGlobalRafPending = true; requestAnimationFrame(() => { yGlobalRafPending = false; const idx = getIdx(mouseX); yChartRegistry.forEach(fn => fn(idx)); }); }
-      };
-      wrap._yTouch = e => {
-        if (!chartReady) return;
-        const mouseX = e.touches[0].clientX - chartCanvas.getBoundingClientRect().left;
-        if (!yGlobalRafPending) { yGlobalRafPending = true; requestAnimationFrame(() => { yGlobalRafPending = false; const idx = getIdx(mouseX); yChartRegistry.forEach(fn => fn(idx)); }); }
-      };
-      wrap.addEventListener('mousemove', wrap._yMouse, { passive: true });
-      wrap.addEventListener('touchmove', wrap._yTouch, { passive: true });
+    metrics.forEach(m => {
+      const numEl = document.getElementById('lv-' + m.id);
+      const avgEl = document.getElementById('avg-' + m.id);
+      if (avgEl) { avgEl.textContent = 'avg ' + m.av.toFixed(1) + '%'; avgEl.style.color = m.line; avgEl.style.background = m.line + '15'; }
+      if (numEl) { numEl.style.color = m.line; numEl.textContent = '--%'; }
     });
+
+    let xLabels, fullLabels;
+    if (yPeriod === 'daily') {
+      xLabels = fd.map((r, i) => {
+        const mm = parseInt(r.d.split('-')[0], 10);
+        const prev = i > 0 ? parseInt(fd[i-1].d.split('-')[0], 10) : null;
+        return mm !== prev ? MONTHS_SHORT[mm - 1] : '';
+      });
+      fullLabels = fd.map(r => {
+        const [mm, dd] = r.d.split('-');
+        return dd + ' ' + MONTHS_SHORT[parseInt(mm, 10) - 1];
+      });
+    } else {
+      xLabels = fd.map(r => r.d);
+      fullLabels = fd.map(r => r.d);
+    }
+
+    const sorted = [...metrics].sort((a, b) => a.av - b.av);
+    const BAND_GAP = 0.07;
+    const bandH = (1.0 - (sorted.length - 1) * BAND_GAP) / sorted.length;
+
+    sorted.forEach(m => {
+      const mn = Math.min(...m.values), mx = Math.max(...m.values);
+      const pad = (mx - mn) * 0.15 || 0.5;
+      m.dataMin = mn - pad; m.dataMax = mx + pad;
+    });
+    const uniRange = Math.max(...sorted.map(m => m.dataMax - m.dataMin)) || 1;
+
+    sorted.forEach((m, i) => {
+      m.bandBot = i * (bandH + BAND_GAP);
+      m.bandTop = m.bandBot + bandH;
+      const center = (m.dataMin + m.dataMax) / 2;
+      m.nMin = center - uniRange / 2;
+      m.nMax = center + uniRange / 2;
+      m.nRange = uniRange;
+      m.norm = m.values.map(v => m.bandBot + ((v - m.nMin) / m.nRange) * bandH);
+      m.nAvg = m.bandBot + ((m.av - m.nMin) / m.nRange) * bandH;
+    });
+
+    const longPeriod = yPeriod === 'daily' && fd.length > 31;
+    function yNiceTicks(lo, hi) {
+      const steps = longPeriod ? [1, 2, 5, 10, 20] : [0.5, 1, 2, 5, 10, 20];
+      for (const s of steps) {
+        const t = [];
+        for (let v = Math.ceil(lo / s) * s; v <= hi + 0.01; v += s) t.push(Math.round(v * 10) / 10);
+        if (t.length <= 8) return t;
+      }
+      return [Math.round(((lo + hi) / 2) * 10) / 10];
+    }
+
+    const datasets = sorted.map(m => ({
+      data: m.norm, borderColor: m.line, borderWidth: 1.5,
+      backgroundColor: 'transparent', fill: false,
+      tension: 0.15, pointRadius: 0, pointHoverRadius: 0, clip: false
+    }));
+
+    const bandAxisPlugin = {
+      id: 'bandAxis',
+      afterDraw(ch) {
+        const { ctx: c, chartArea, scales: { y } } = ch;
+        if (!chartArea || !y) return;
+        const { left, right } = chartArea;
+        c.save();
+        sorted.forEach((m, i) => {
+          const ticks = yNiceTicks(m.nMin, m.nMax);
+          ticks.forEach(v => {
+            const normPos = m.bandBot + ((v - m.nMin) / m.nRange) * bandH;
+            const px = y.getPixelForValue(normPos);
+            c.strokeStyle = getCSSVar('--border-light'); c.lineWidth = 0.5;
+            c.beginPath(); c.moveTo(left, px); c.lineTo(right, px); c.stroke();
+            c.fillStyle = m.line; c.font = '400 9px "JetBrains Mono", monospace';
+            c.textAlign = 'left'; c.textBaseline = 'middle';
+            c.fillText(v.toFixed(1) + '%', right + 6, px);
+          });
+          const avgPx = y.getPixelForValue(m.nAvg);
+          c.strokeStyle = m.line + '33'; c.lineWidth = 1; c.setLineDash([4, 4]);
+          c.beginPath(); c.moveTo(left, avgPx); c.lineTo(right, avgPx); c.stroke();
+          c.setLineDash([]);
+          const vals = m.values;
+          if (vals.length > 1) {
+            const maxVal = Math.max(...vals), minVal = Math.min(...vals);
+            const maxIdx = vals.indexOf(maxVal), minIdx = vals.indexOf(minVal);
+            const stp = vals.length > 1 ? (right - left) / (vals.length - 1) : 0;
+            c.font = 'bold 9px "JetBrains Mono", monospace';
+            function drawPeakLabel(idx, val, isTop) {
+              const xp = left + idx * stp;
+              const normP = m.bandBot + ((val - m.nMin) / m.nRange) * bandH;
+              const yp = y.getPixelForValue(normP);
+              const txt = val.toFixed(2);
+              const tw = c.measureText(txt).width;
+              const cx = Math.max(left + tw / 2, Math.min(right - tw / 2, xp));
+              const cy = isTop ? yp - 10 : yp + 12;
+              c.fillStyle = m.line; c.textAlign = 'center'; c.textBaseline = 'middle';
+              c.fillText(txt, cx, cy);
+            }
+            drawPeakLabel(maxIdx, maxVal, true);
+            if (maxIdx !== minIdx) drawPeakLabel(minIdx, minVal, false);
+          }
+          if (i < sorted.length - 1) {
+            const gy = y.getPixelForValue(m.bandTop + BAND_GAP / 2);
+            const gx = right + 12;
+            c.strokeStyle = getCSSVar('--text-muted'); c.lineWidth = 1;
+            c.beginPath();
+            c.moveTo(gx - 4, gy - 4); c.lineTo(gx + 2, gy - 1);
+            c.lineTo(gx - 4, gy + 1); c.lineTo(gx + 2, gy + 4);
+            c.stroke();
+          }
+        });
+        c.restore();
+      }
+    };
+
+    const chartCanvas = document.getElementById('chart-yield');
+    const chartCtx = chartCanvas.getContext('2d');
+
+    const chart = new Chart(chartCtx, {
+      type: 'line',
+      data: { labels: xLabels, datasets },
+      plugins: [bandAxisPlugin],
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        animation: { duration: 820, easing: 'easeInOutQuart' },
+        events: [],
+        layout: { padding: { top: 10, bottom: 8, left: 4, right: 44 } },
+        plugins: { legend: { display: false }, tooltip: { enabled: false } },
+        scales: {
+          x: { grid: { display: false }, border: { display: false }, ticks: { color: getCSSVar('--text-muted'), font: { family: 'JetBrains Mono', size: 9, weight: '600' }, maxRotation: 0, padding: 0, autoSkip: yPeriod !== 'daily' } },
+          y: { display: false, min: -0.05, max: 1.05 }
+        }
+      }
+    });
+    yChartInstances['unified'] = chart;
+
+    const wrap = chartCanvas.parentElement;
+    wrap.style.position = 'relative';
+    wrap.querySelector('canvas.y-overlay')?.remove();
+    const over = document.createElement('canvas');
+    over.className = 'y-overlay';
+    over.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;';
+    wrap.appendChild(over);
+    function syncSize() { over.width = chartCanvas.width; over.height = chartCanvas.height; }
+    syncSize();
+    new ResizeObserver(syncSize).observe(chartCanvas);
+    const oc = over.getContext('2d');
+
+    const dlWrap = document.getElementById('dl-yield');
+    dlWrap.innerHTML = '';
+    const dlSpan = document.createElement('span');
+    dlWrap.appendChild(dlSpan);
+
+    let chartReady = false;
+    setTimeout(() => { chartReady = true; yChartRegistry.forEach(fn => fn(fd.length - 1)); }, 840);
+
+    function drawAtIndex(si) {
+      const ca = chart.chartArea; if (!ca) return;
+      const safeIdx = Math.max(0, Math.min(fd.length - 1, si));
+      const stp2 = fd.length > 1 ? (ca.right - ca.left) / (fd.length - 1) : 0;
+      const xp = fd.length > 1 ? ca.left + safeIdx * stp2 : (ca.left + ca.right) / 2;
+      const dpr = window.devicePixelRatio || 1;
+
+      oc.clearRect(0, 0, over.width, over.height);
+      oc.save();
+      oc.strokeStyle = 'rgba(0,0,0,0.15)'; oc.lineWidth = 1 * dpr; oc.setLineDash([4 * dpr, 4 * dpr]);
+      oc.beginPath(); oc.moveTo(xp * dpr, ca.top * dpr); oc.lineTo(xp * dpr, ca.bottom * dpr); oc.stroke();
+      oc.setLineDash([]);
+
+      metrics.forEach(m => {
+        const nVal = m.norm[safeIdx]; if (nVal === undefined) return;
+        const yp = chart.scales.y.getPixelForValue(nVal);
+        oc.beginPath(); oc.arc(xp * dpr, yp * dpr, 3.5 * dpr, 0, Math.PI * 2);
+        oc.fillStyle = m.line; oc.fill(); oc.strokeStyle = '#fff'; oc.lineWidth = 1.5 * dpr; oc.stroke();
+        const numEl = document.getElementById('lv-' + m.id);
+        if (numEl) numEl.textContent = m.values[safeIdx].toFixed(2) + '%';
+      });
+
+      oc.restore();
+      const rect = chartCanvas.getBoundingClientRect();
+      const dlRect = dlWrap.getBoundingClientRect();
+      dlSpan.textContent = fullLabels[safeIdx]; dlSpan.style.left = (rect.left - dlRect.left + xp) + 'px';
+    }
+    yChartRegistry.push(drawAtIndex);
+
+    function getIdx(mouseX) {
+      const ca = chart.chartArea; if (!ca) return 0;
+      if (fd.length <= 1) return 0;
+      return Math.max(0, Math.min(fd.length - 1, Math.round((mouseX - ca.left) / ((ca.right - ca.left) / (fd.length - 1)))));
+    }
+    if (wrap._yMouse) wrap.removeEventListener('mousemove', wrap._yMouse);
+    if (wrap._yTouch) wrap.removeEventListener('touchmove', wrap._yTouch);
+    wrap._yMouse = e => {
+      if (!chartReady) return;
+      const mouseX = e.clientX - chartCanvas.getBoundingClientRect().left;
+      if (!yGlobalRafPending) { yGlobalRafPending = true; requestAnimationFrame(() => { yGlobalRafPending = false; const idx = getIdx(mouseX); yChartRegistry.forEach(fn => fn(idx)); }); }
+    };
+    wrap._yTouch = e => {
+      if (!chartReady) return;
+      const mouseX = e.touches[0].clientX - chartCanvas.getBoundingClientRect().left;
+      if (!yGlobalRafPending) { yGlobalRafPending = true; requestAnimationFrame(() => { yGlobalRafPending = false; const idx = getIdx(mouseX); yChartRegistry.forEach(fn => fn(idx)); }); }
+    };
+    wrap.addEventListener('mousemove', wrap._yMouse, { passive: true });
+    wrap.addEventListener('touchmove', wrap._yTouch, { passive: true });
   }
 
   // ═══════════════════════════════════════

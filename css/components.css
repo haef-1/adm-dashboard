@@ -955,9 +955,58 @@
   flex-shrink: 0;
 }
 
-/* ── Yield Per Truk (line chart cards) ── */
+/* ── Yield Per Truk (unified chart) ── */
 .y-container {
   padding: 16px 20px;
+}
+
+.y-stats-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.y-stat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 10px 8px 8px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  position: relative;
+  overflow: hidden;
+  min-width: 0;
+}
+
+
+.y-stat-label {
+  margin-bottom: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-mid);
+  line-height: 1;
+  letter-spacing: .01em;
+}
+
+.y-stat-val {
+  font-family: var(--font-mono);
+  font-size: 20px;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: -.04em;
+  margin-bottom: 4px;
+  transition: color .15s;
+}
+
+.y-stat-avg {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  border-radius: 4px;
+  padding: 2px 6px;
+  line-height: 1.2;
 }
 
 .y-card {
@@ -1030,14 +1079,14 @@
 
 .y-chart-wrap {
   position: relative;
-  height: 150px;
-  margin: 0 16px 6px;
+  height: 340px;
+  margin: 0 0 6px;
 }
 
 .y-chart-date-label {
   height: 10px;
   position: relative;
-  margin: 0 16px;
+  margin: 0;
   font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 600;
@@ -1165,8 +1214,13 @@
 
 /* ── Karkas mobile ── */
 @media (max-width: 600px) {
-  .y-card-header { padding: 6px 12px 0; }
-  .y-chart-wrap { height: 120px; margin: 0 12px 4px; }
+  .y-container { padding: 12px 10px; }
+  .y-stats-row { gap: 6px; }
+  .y-stat { padding: 8px 6px 6px; border-radius: 10px; }
+  .y-stat-label { font-size: 10px; }
+  .y-stat-avg { font-size: 9px; padding: 1px 5px; }
+  .y-stat-val { font-size: 16px; }
+  .y-chart-wrap { height: 280px; }
   .section-header-controls { flex-wrap: wrap; gap: 6px; }
   .sankey-body { padding: 12px 6px; }
   .s-axis-labels { padding: 0 4px; }
