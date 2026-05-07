@@ -955,6 +955,221 @@
   flex-shrink: 0;
 }
 
+/* ── Yield Per Truk (line chart cards) ── */
+.y-container {
+  padding: 16px 20px;
+}
+
+.y-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 0;
+  margin-bottom: 10px;
+  position: relative;
+  overflow: visible;
+}
+
+.y-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  border-radius: 18px 18px 0 0;
+  background: linear-gradient(90deg, var(--card-accent, var(--blue)), transparent);
+}
+
+.y-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 8px 16px 0;
+  margin-bottom: 2px;
+  gap: 8px;
+}
+
+.y-card-title-block { min-width: 0; flex: 1; }
+
+.y-card-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.y-card-avg {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 900;
+  color: var(--text);
+  margin-top: 3px;
+  letter-spacing: .01em;
+  display: inline-block;
+  background: var(--bg);
+  border-radius: 4px;
+  padding: 1px 6px;
+}
+
+.y-live-block { display: flex; flex-direction: column; align-items: flex-end; flex-shrink: 0; }
+
+.y-live-num {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  font-weight: 900;
+  color: var(--text);
+  line-height: 1;
+  letter-spacing: -.03em;
+  transition: color .1s;
+}
+
+.y-live-num.idle { color: var(--text-muted); }
+
+.y-chart-wrap {
+  position: relative;
+  height: 150px;
+  margin: 0 16px 6px;
+}
+
+.y-chart-date-label {
+  height: 10px;
+  position: relative;
+  margin: 0 16px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-mid);
+  display: flex;
+  align-items: center;
+}
+
+.y-chart-date-label span {
+  position: absolute;
+  background: var(--bg);
+  padding: 2px 6px;
+  border-radius: 3px;
+  white-space: nowrap;
+  transform: translateX(-50%);
+  transition: left .05s;
+}
+
+/* ── Karkas Distribution (Sankey canvas) ── */
+.section-header-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sankey-body {
+  padding: 16px 20px;
+}
+
+.s-axis-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.s-lbl-l {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--green);
+}
+
+.s-lbl-r {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--red);
+}
+
+.s-hint {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-align: center;
+  margin-bottom: 4px;
+}
+
+.s-chart-wrap { width: 100%; }
+.s-chart-wrap canvas { width: 100%; display: block; cursor: pointer; }
+
+.s-empty {
+  padding: 32px 20px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+  display: none;
+}
+
+.s-empty-icon { font-size: 28px; margin-bottom: 10px; }
+
+.s-tab-grp { display: flex; gap: 6px; }
+
+.s-tab-btn {
+  padding: 5px 14px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1.5px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  transition: all .2s;
+  font-family: var(--font-mono);
+}
+
+.s-tab-btn.active {
+  border-color: var(--green);
+  color: var(--green);
+}
+
+.s-legend {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 0 4px;
+}
+
+.s-leg {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-mid);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  transition: all .2s;
+}
+
+.s-leg:hover { border-color: var(--border); }
+.s-leg.active-leg { border-color: var(--text-muted); background: var(--surface-alt); }
+.s-leg-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+
+/* ── Karkas grid (yield + sankey side-by-side) ── */
+.karkas-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  align-items: start;
+}
+.karkas-grid .section { margin: 16px 5px; }
+
+@media (max-width: 768px) {
+  .karkas-grid { grid-template-columns: 1fr; }
+}
+
+/* ── Karkas mobile ── */
+@media (max-width: 600px) {
+  .y-card-header { padding: 6px 12px 0; }
+  .y-chart-wrap { height: 120px; margin: 0 12px 4px; }
+  .section-header-controls { flex-wrap: wrap; gap: 6px; }
+}
+
 /* ── Filter row ── */
 .filter-row {
   display: flex;
@@ -1778,8 +1993,6 @@
   background: var(--bg);
   padding: 10px 12px;
   text-align: left;
-  white-space: normal;
-  word-wrap: break-word;
   border-bottom: 1px solid var(--border);
   position: sticky;
   top: 0;
@@ -1806,6 +2019,12 @@
   }
   .smt-mat-cell {
     font-size: 9px;
+  }
+  .smt-table th:first-child,
+  .smt-table td:first-child {
+    max-width: 40vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 }
 
@@ -1839,10 +2058,10 @@
   padding: 10px 12px;
   border-bottom: 1px solid var(--border-light);
   color: var(--text);
-  white-space: normal;
-  word-wrap: break-word;
-  overflow: hidden;
-  text-overflow: ellipsis;
+}
+
+.data-table td[data-v] {
+  white-space: nowrap;
 }
 
 .data-table tbody tr.row-latest {

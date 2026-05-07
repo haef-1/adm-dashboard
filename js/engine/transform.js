@@ -17,6 +17,12 @@ const Engine = (() => {
   let YIELD_DATA = [];
   let ALL_RAW = [];
 
+  // ── Precomputed indices (built once in buildDerivedData) ──
+  let _allDates = [];
+  let _yieldByDate = {};
+  let _susutByDate = {};
+  let _bahanDistByDate = {};
+
   // ── Livebird S/M/L mapping (mat code → category) ──
   const LB_SIZE_MAP = {
     '17002566': 'Small',
@@ -74,23 +80,69 @@ const Engine = (() => {
     };
   }
 
-  // ── Build YIELD_DATA + ALL_RAW from RAW_DB ──
+  // ── Build all derived data + indices from RAW_DB (single scan) ──
   function buildDerivedData() {
     YIELD_DATA = [];
     ALL_RAW = [];
+    _yieldByDate = {};
+    _susutByDate = {};
+    _bahanDistByDate = {};
 
-    // --- YIELD_DATA: dept=KARKAS, pv=AYAM BARU, mvt in [BAHAN, HASIL, BY PRODUCT] ---
+    const dateSet = new Set();
     const karkasByDate = {};
+
+    function cleanGrade(matdesc) {
+      return matdesc.replace(/^KARKAS\s*\(\s*/, '').replace(/\s*\)\s*$/, '').replace(/\s*-\s*/g, '-').trim();
+    }
+
     RAW_DB.forEach(r => {
-      const dept = R_DEPT[r[0]], pv = R_PV[r[1]], mvt = R_MVT[r[5]];
-      if (dept !== 'KARKAS' || pv !== 'AYAM BARU') return;
-      if (!['BAHAN','HASIL','BY PRODUCT'].includes(mvt)) return;
-      if (!karkasByDate[r[8]]) karkasByDate[r[8]] = { bahan: 0, hasil: 0, byprod: 0 };
-      if (mvt === 'BAHAN') karkasByDate[r[8]].bahan += r[7];
-      if (mvt === 'HASIL') karkasByDate[r[8]].hasil += r[7];
-      if (mvt === 'BY PRODUCT') karkasByDate[r[8]].byprod += r[7];
+      const dept = R_DEPT[r[0]], pv = R_PV[r[1]], mvt = R_MVT[r[5]],
+            sloc = R_SLOC[r[9]], matdesc = R_MATDESC[r[4]], date = r[8];
+
+      dateSet.add(date);
+
+      // YIELD_DATA source: KARKAS + AYAM BARU
+      if (dept === 'KARKAS' && pv === 'AYAM BARU' &&
+          (mvt === 'BAHAN' || mvt === 'HASIL' || mvt === 'BY PRODUCT')) {
+        if (!karkasByDate[date]) karkasByDate[date] = { bahan: 0, hasil: 0, byprod: 0 };
+        if (mvt === 'BAHAN') karkasByDate[date].bahan += r[7];
+        else if (mvt === 'HASIL') karkasByDate[date].hasil += r[7];
+        else karkasByDate[date].byprod += r[7];
+      }
+
+      // ALL_RAW: distribution chart
+      if (DIST_DEPTS.has(dept) && pv === 'AYAM BARU' && mvt === 'BAHAN' &&
+          sloc === 'STAGING RM' && matdesc.includes('KARKAS')) {
+        ALL_RAW.push({ dept, grade: cleanGrade(matdesc), brd: r[6], kg: r[7], date });
+      }
+
+      // Susut LB index
+      if (dept === 'KARKAS' && sloc === 'LIVEBIRD') {
+        if (!_susutByDate[date]) _susutByDate[date] = { bahan: 0, minus: 0, plus: 0 };
+        if (mvt === 'BAHAN') _susutByDate[date].bahan += r[7];
+        else if (mvt === 'SUSUT (-)' || mvt === 'SUSUT ( )') _susutByDate[date].minus += r[7];
+        else if (mvt === 'SUSUT (+)') _susutByDate[date].plus += r[7];
+      }
+
+      // Bahan distribution index
+      if (DIST_DEPTS.has(dept) && mvt === 'BAHAN') {
+        const dk = (dept === 'BONELESS BONGKAR' || dept === 'BONELESS MIX') ? 'BONELESS' : dept;
+        const isAB = pv === 'AYAM BARU' && sloc === 'STAGING RM' && matdesc.includes('KARKAS');
+        const isAL = pv === 'AYAM LAMA' && (sloc === 'CRP' || sloc === 'REPRO');
+        if (isAB || isAL) {
+          if (!_bahanDistByDate[date]) _bahanDistByDate[date] = {};
+          if (!_bahanDistByDate[date][dk]) _bahanDistByDate[date][dk] = { ab_brd: 0, ab_kg: 0, al_brd: 0, al_kg: 0 };
+          const e = _bahanDistByDate[date][dk];
+          if (isAB) { e.ab_brd += r[6]; e.ab_kg += r[7]; }
+          if (isAL) { e.al_brd += r[6]; e.al_kg += r[7]; }
+        }
+      }
     });
 
+    // Index all karkas aggregates (getKpiForRange uses this)
+    _yieldByDate = karkasByDate;
+
+    // Build YIELD_DATA array (only dates with bahan>0, for yield chart)
     Object.keys(karkasByDate).sort().forEach(d => {
       const v = karkasByDate[d];
       if (!v.bahan) return;
@@ -104,18 +156,7 @@ const Engine = (() => {
       });
     });
 
-    // --- ALL_RAW: for distribution chart ---
-    function cleanGrade(matdesc) {
-      return matdesc.replace(/^KARKAS\s*\(\s*/, '').replace(/\s*\)\s*$/, '').replace(/\s*-\s*/g, '-').trim();
-    }
-
-    RAW_DB.forEach(r => {
-      const dept = R_DEPT[r[0]], pv = R_PV[r[1]], mvt = R_MVT[r[5]],
-            sloc = R_SLOC[r[9]], matdesc = R_MATDESC[r[4]];
-      if (!DIST_DEPTS.has(dept) || pv !== 'AYAM BARU' || mvt !== 'BAHAN' ||
-          sloc !== 'STAGING RM' || !matdesc.includes('KARKAS')) return;
-      ALL_RAW.push({ dept, grade: cleanGrade(matdesc), brd: r[6], kg: r[7], date: r[8] });
-    });
+    _allDates = [...dateSet].sort();
   }
 
   // ── Volume-weighted average ──
@@ -133,17 +174,17 @@ const Engine = (() => {
 
   // ── Get available dates ──
   function getAvailableDates() {
-    return YIELD_DATA.map(r => r.ymd);
+    return _allDates;
   }
 
   function getLastDate() {
-    return YIELD_DATA.length ? YIELD_DATA[YIELD_DATA.length - 1].ymd : null;
+    return _allDates.length ? _allDates[_allDates.length - 1] : null;
   }
 
   // ── Get available months ──
   function getAvailableMonths() {
     const seen = new Set();
-    YIELD_DATA.forEach(r => { if (r.ymd) seen.add(r.ymd.slice(0, 7)); });
+    _allDates.forEach(d => seen.add(d.slice(0, 7)));
     return [...seen].sort();
   }
 
@@ -214,21 +255,9 @@ const Engine = (() => {
 
   // ── Susut LB for a specific date ──
   function getSusutLBForDate(dateStr) {
-    let susutMinus = 0, susutPlus = 0, bahanLB = 0;
-
-    RAW_DB.forEach(r => {
-      if (R_DEPT[r[0]] !== 'KARKAS') return;
-      if (r[8] !== dateStr || R_SLOC[r[9]] !== 'LIVEBIRD') return;
-
-      const mvt = R_MVT[r[5]];
-      if (mvt === 'BAHAN') bahanLB += r[7];
-      else if (mvt === 'SUSUT (-)' || mvt === 'SUSUT ( )') susutMinus += r[7];
-      else if (mvt === 'SUSUT (+)') susutPlus += r[7];
-    });
-
-    if (!bahanLB) return null;
-    const pct = Math.round((susutMinus - susutPlus) / bahanLB * 10000) / 100;
-    return pct;
+    const s = _susutByDate[dateStr];
+    if (!s || !s.bahan) return null;
+    return Math.round((s.minus - s.plus) / s.bahan * 10000) / 100;
   }
 
   // ── Truck count per day for calendar month ──
@@ -251,33 +280,25 @@ const Engine = (() => {
 
   // ── Bahan distribution per dept per date ──
   function getBahanDistribution(dateRange, pvMode, metric) {
-    // pvMode: 'AYAM BARU', 'AYAM LAMA', 'AYAM PROSES'
-    const result = {}; // { date: { dept: value } }
-
-    RAW_DB.forEach(r => {
-      const dept = R_DEPT[r[0]], pv = R_PV[r[1]], mvt = R_MVT[r[5]],
-            sloc = R_SLOC[r[9]], matdesc = R_MATDESC[r[4]], date = r[8];
-
-      if (!DIST_DEPTS.has(dept) || mvt !== 'BAHAN') return;
-      if (!dateRange.includes(date)) return;
-
-      let match = false;
-      if (pvMode === 'AYAM BARU' || pvMode === 'AYAM PROSES') {
-        if (pv === 'AYAM BARU' && sloc === 'STAGING RM' && matdesc.includes('KARKAS')) match = true;
-      }
-      if (pvMode === 'AYAM LAMA' || pvMode === 'AYAM PROSES') {
-        if (pv === 'AYAM LAMA' && (sloc === 'CRP' || sloc === 'REPRO')) match = true;
-      }
-
-      if (!match) return;
-
-      // Merge BONELESS BONGKAR + BONELESS MIX → BONELESS
-      const deptKey = (dept === 'BONELESS BONGKAR' || dept === 'BONELESS MIX') ? 'BONELESS' : dept;
-      if (!result[date]) result[date] = {};
-      if (!result[date][deptKey]) result[date][deptKey] = 0;
-      result[date][deptKey] += metric === 'brd' ? r[6] : r[7];
+    const result = {};
+    dateRange.forEach(date => {
+      const dd = _bahanDistByDate[date];
+      if (!dd) return;
+      Object.keys(dd).forEach(dept => {
+        const e = dd[dept];
+        let val = 0;
+        if (pvMode === 'AYAM BARU' || pvMode === 'AYAM PROSES') {
+          val += metric === 'brd' ? e.ab_brd : e.ab_kg;
+        }
+        if (pvMode === 'AYAM LAMA' || pvMode === 'AYAM PROSES') {
+          val += metric === 'brd' ? e.al_brd : e.al_kg;
+        }
+        if (val) {
+          if (!result[date]) result[date] = {};
+          result[date][dept] = val;
+        }
+      });
     });
-
     return result;
   }
 
@@ -493,18 +514,14 @@ const Engine = (() => {
 
   // ── Weighted KPI for a date range ──
   function getKpiForRange(dateArr) {
-    const dateSet = new Set(dateArr);
     let sumBahan = 0, sumHasil = 0, sumByprod = 0;
-
-    RAW_DB.forEach(r => {
-      if (R_DEPT[r[0]] !== 'KARKAS' || R_PV[r[1]] !== 'AYAM BARU') return;
-      if (!dateSet.has(r[8])) return;
-      const mvt = R_MVT[r[5]];
-      if (mvt === 'BAHAN') sumBahan += r[7];
-      else if (mvt === 'HASIL') sumHasil += r[7];
-      else if (mvt === 'BY PRODUCT') sumByprod += r[7];
+    dateArr.forEach(d => {
+      const r = _yieldByDate[d];
+      if (!r) return;
+      sumBahan += r.bahan;
+      sumHasil += r.hasil;
+      sumByprod += r.byprod;
     });
-
     if (!sumBahan) return { yk: 0, yb: 0, w: 0 };
     return {
       yk: Math.round(sumHasil / sumBahan * 10000) / 100,
@@ -515,20 +532,72 @@ const Engine = (() => {
 
   // ── Weighted Susut LB for a date range ──
   function getSusutLBForRange(dateArr) {
-    const dateSet = new Set(dateArr);
-    let susutMinus = 0, susutPlus = 0, bahanLB = 0;
+    let bahan = 0, minus = 0, plus = 0;
+    dateArr.forEach(d => {
+      const s = _susutByDate[d];
+      if (!s) return;
+      bahan += s.bahan;
+      minus += s.minus;
+      plus += s.plus;
+    });
+    if (!bahan) return null;
+    return Math.round((minus - plus) / bahan * 10000) / 100;
+  }
+
+  // ── Yield per truck for a specific date ──
+  function getYieldPerTruck(dateStr) {
+    const trucks = {};
+    RAW_DB.forEach(r => {
+      if (r[8] !== dateStr) return;
+      if (R_DEPT[r[0]] !== 'KARKAS' || R_PV[r[1]] !== 'AYAM BARU') return;
+      const mvt = R_MVT[r[5]];
+      if (mvt !== 'BAHAN' && mvt !== 'HASIL') return;
+      const order = R_ORDER[r[2]];
+      if (!trucks[order]) trucks[order] = { order, bahanKg: 0, hasilKg: 0, size: null, matdesc: '' };
+      if (mvt === 'BAHAN') {
+        trucks[order].bahanKg += r[7];
+        if (R_SLOC[r[9]] === 'LIVEBIRD' && R_MATDESC[r[4]].includes('AYAM HIDUP')) {
+          const matCode = R_MAT[r[3]];
+          trucks[order].size = LB_SIZE_MAP[matCode] || null;
+          trucks[order].matdesc = R_MATDESC[r[4]];
+        }
+      } else {
+        trucks[order].hasilKg += r[7];
+      }
+    });
+    return Object.values(trucks)
+      .filter(t => t.bahanKg > 0)
+      .map(t => ({ ...t, yieldPct: Math.round(t.hasilKg / t.bahanKg * 10000) / 100 }))
+      .sort((a, b) => b.yieldPct - a.yieldPct);
+  }
+
+  // ── Karkas flow data for sankey ──
+  function getKarkasFlow(dateStr, pvMode) {
+    pvMode = pvMode || 'AYAM BARU';
+    let bahanKg = 0, hasilKg = 0, byprodKg = 0;
+    let susutMinus = 0, susutPlus = 0;
 
     RAW_DB.forEach(r => {
-      if (R_DEPT[r[0]] !== 'KARKAS') return;
-      if (!dateSet.has(r[8]) || R_SLOC[r[9]] !== 'LIVEBIRD') return;
-      const mvt = R_MVT[r[5]];
-      if (mvt === 'BAHAN') bahanLB += r[7];
+      if (r[8] !== dateStr || R_DEPT[r[0]] !== 'KARKAS') return;
+      const pv = R_PV[r[1]], mvt = R_MVT[r[5]];
+      if (pvMode !== 'AYAM PROSES' && pv !== pvMode) return;
+      if (mvt === 'BAHAN') bahanKg += r[7];
+      else if (mvt === 'HASIL') hasilKg += r[7];
+      else if (mvt === 'BY PRODUCT') byprodKg += r[7];
       else if (mvt === 'SUSUT (-)' || mvt === 'SUSUT ( )') susutMinus += r[7];
       else if (mvt === 'SUSUT (+)') susutPlus += r[7];
     });
 
-    if (!bahanLB) return null;
-    return Math.round((susutMinus - susutPlus) / bahanLB * 10000) / 100;
+    const susutKg = susutMinus - susutPlus;
+    const wasteKg = Math.max(0, bahanKg - hasilKg - byprodKg - susutKg);
+
+    const depts = { 'CUT UP': 0, 'BONELESS': 0, 'AU': 0, 'PARTING': 0 };
+    const dist = getBahanDistribution([dateStr], pvMode, 'kg');
+    if (dist[dateStr]) {
+      Object.keys(depts).forEach(d => { depts[d] = dist[dateStr][d] || 0; });
+    }
+
+    return { bahanKg, hasilKg, byprodKg, wasteKg, susutKg, depts };
   }
 
   return {
@@ -538,6 +607,7 @@ const Engine = (() => {
     getKpiForDate, getTruckForDate, getTruckDelta,
     getSusutLBForDate, getSusutLBForRange, getKpiForRange, getTruckCalendar,
     getBahanDistribution, getByProductForDate,
+    getYieldPerTruck, getKarkasFlow,
     searchMaterial, calcMaterialValue, getMaterialFilterOptions, materialMatchesFilter,
     calcMaterialValueRange, getMaterialFilterOptionsRange, materialMatchesFilterRange,
     LB_SIZE_MAP, DIST_DEPTS, R_MVT, R_SLOC,

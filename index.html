@@ -51,10 +51,16 @@
         <div class="sidebar-logo">P2</div>
       </div>
       <div class="sidebar-view-toggle" id="sidebarViewToggle">
-        <select class="view-toggle-select" id="viewModeSelect">
-          <option value="chart">📊 Chart</option>
-          <option value="table">📋 Table</option>
-        </select>
+        <div class="view-toggle-group" id="viewModeSelect">
+          <button class="view-toggle-btn active" data-mode="chart">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 20V10M12 20V4M6 20V14"/></svg>
+            <span class="view-toggle-label">Chart</span>
+          </button>
+          <button class="view-toggle-btn" data-mode="table">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></svg>
+            <span class="view-toggle-label">Table</span>
+          </button>
+        </div>
       </div>
       <nav class="sidebar-nav">
         <a class="nav-item active" href="#overview" data-page="overview" data-page-table="overview-table">
@@ -86,6 +92,7 @@
     <main class="main" style="display:none">
       <!-- TOPBAR -->
       <header class="topbar">
+        <div class="topbar-logo-mobile" id="topbarLogoMobile">P2</div>
         <div class="topbar-brand">Pemalang 2</div>
         <div class="topbar-search">
           <svg

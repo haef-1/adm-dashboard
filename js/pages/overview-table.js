@@ -3,6 +3,26 @@
    ═══════════════════════════════════════ */
 
 const OverviewTablePage = (() => {
+  function exportSheetWithRaw(table) {
+    const ws = XLSX.utils.table_to_sheet(table);
+    const rows = table.querySelectorAll("tr");
+    let r = 0;
+    rows.forEach(tr => {
+      let c = 0;
+      tr.querySelectorAll("th, td").forEach(cell => {
+        const addr = XLSX.utils.encode_cell({ r, c });
+        const raw = cell.getAttribute("data-v");
+        if (raw !== null && ws[addr]) {
+          const num = parseFloat(raw);
+          if (!isNaN(num)) { ws[addr].t = "n"; ws[addr].v = num; }
+        }
+        c++;
+      });
+      r++;
+    });
+    return ws;
+  }
+
   let period = "daily";
   let selectedItems = null;
   let selectedFrom = null;
@@ -324,10 +344,10 @@ const OverviewTablePage = (() => {
           ${rows.length ? rows.map(r => `
             <tr class="${r.date === latestDate ? 'row-latest' : ''}">
               <td>${r.label}</td>
-              <td class="${r.yk < 74.5 ? 'val-danger' : ''}">${r.yk.toFixed(2)}</td>
-              <td>${r.yb.toFixed(2)}</td>
-              <td class="${r.w > 4.5 ? 'val-danger' : ''}">${r.w.toFixed(2)}</td>
-              <td>${r.susut.toFixed(2)}</td>
+              <td data-v="${r.yk}" class="${r.yk < 74.5 ? 'val-danger' : ''}">${r.yk.toFixed(2)}</td>
+              <td data-v="${r.yb}">${r.yb.toFixed(2)}</td>
+              <td data-v="${r.w}" class="${r.w > 4.5 ? 'val-danger' : ''}">${r.w.toFixed(2)}</td>
+              <td data-v="${r.susut}">${r.susut.toFixed(2)}</td>
             </tr>
           `).join("") : `<tr><td colspan="5" class="table-empty">Tidak ada data untuk periode ini.</td></tr>`}
         </tbody>
@@ -700,7 +720,7 @@ const OverviewTablePage = (() => {
     if (!table) return;
 
     const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.table_to_sheet(table);
+    const ws = exportSheetWithRaw(table);
     XLSX.utils.book_append_sheet(wb, ws, "KPI");
     XLSX.writeFile(wb, `KPI_Overview_${period}_${new Date().toISOString().slice(0, 10)}.xlsx`);
   }
@@ -862,8 +882,8 @@ const OverviewTablePage = (() => {
           ${rows.length ? rows.map(r => `
             <tr class="${r.date === latestDate ? 'row-latest' : ''}">
               <td>${r.label}</td>
-              ${BAHAN_DEPTS.map(dept => `<td>${fmtVal(r[dept])}</td>`).join("")}
-              <td><strong>${fmtVal(r.total)}</strong></td>
+              ${BAHAN_DEPTS.map(dept => `<td data-v="${r[dept]}">${fmtVal(r[dept])}</td>`).join("")}
+              <td data-v="${r.total}"><strong>${fmtVal(r.total)}</strong></td>
             </tr>
           `).join("") : `<tr><td colspan="6" class="table-empty">Tidak ada data untuk periode ini.</td></tr>`}
         </tbody>
@@ -1235,7 +1255,7 @@ const OverviewTablePage = (() => {
     if (!table) return;
 
     const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.table_to_sheet(table);
+    const ws = exportSheetWithRaw(table);
     XLSX.utils.book_append_sheet(wb, ws, "Persebaran Bahan");
     XLSX.writeFile(wb, `Persebaran_Bahan_${bhnPeriod}_${bhnPvMode}_${bhnMetric}_${new Date().toISOString().slice(0, 10)}.xlsx`);
   }
@@ -1494,48 +1514,55 @@ const OverviewTablePage = (() => {
     }
   }
 
-  function calcBahanKgForPeriod(periodDates, filters) {
-    const dateSet = new Set(periodDates);
+  function _precomputeSmt(matIndices, dates, filters) {
+    const dateSet = new Set(dates);
+    const matSet = new Set(matIndices);
     const lookups = Engine.getLookups();
-    let bahanKg = 0;
-    Engine.getRawDB().forEach(r => {
-      if (!dateSet.has(r[8]) || lookups.mvt[r[5]] !== "BAHAN") return;
-      const dept = lookups.dept[r[0]];
-      const pv = lookups.pv[r[1]];
-      const sloc = lookups.sloc[r[9]];
-      if (filters.dept !== "All" && dept !== filters.dept) return;
-      const pvFilter = filters.pv;
-      let match = false;
-      if (pvFilter === "AYAM BARU" || pvFilter === "All") {
-        if (pv === "AYAM BARU" && sloc === "STAGING RM") match = true;
-      }
-      if (pvFilter === "AYAM LAMA" || pvFilter === "All") {
-        if (pv === "AYAM LAMA" && (sloc === "CRP" || sloc === "REPRO")) match = true;
-      }
-      if (pvFilter === "AYAM PROSES" || pvFilter === "All") {
-        if (pv === "AYAM PROSES") match = true;
-      }
-      if (!match) return;
-      bahanKg += r[7];
-    });
-    return bahanKg;
-  }
-
-  function calcPerMaterialPerPeriod(matIdx, periodDates, filters, metric) {
-    const dateSet = new Set(periodDates);
-    const lookups = Engine.getLookups();
-    let total = 0;
+    const matchingMats = new Set();
+    const matDate = new Map();
+    const bahanDate = new Map();
 
     Engine.getRawDB().forEach(r => {
-      if (!dateSet.has(r[8]) || r[4] !== matIdx) return;
-      const dept = lookups.dept[r[0]];
-      const pv = lookups.pv[r[1]];
-      const mvt = lookups.mvt[r[5]];
+      if (!dateSet.has(r[8])) return;
+      const dept = lookups.dept[r[0]], pv = lookups.pv[r[1]],
+            mvt = lookups.mvt[r[5]], sloc = lookups.sloc[r[9]];
+
+      if (mvt === "BAHAN" && (filters.dept === "All" || dept === filters.dept)) {
+        const pvF = filters.pv;
+        let ok = false;
+        if (pvF === "All" || pvF === "AYAM BARU") { if (pv === "AYAM BARU" && sloc === "STAGING RM") ok = true; }
+        if (pvF === "All" || pvF === "AYAM LAMA") { if (pv === "AYAM LAMA" && (sloc === "CRP" || sloc === "REPRO")) ok = true; }
+        if (pvF === "All" || pvF === "AYAM PROSES") { if (pv === "AYAM PROSES") ok = true; }
+        if (ok) bahanDate.set(r[8], (bahanDate.get(r[8]) || 0) + r[7]);
+      }
+
+      if (!matSet.has(r[4])) return;
       if (filters.dept !== "All" && dept !== filters.dept) return;
       if (filters.pv !== "All" && pv !== filters.pv) return;
       if (filters.mvt !== "All" && mvt !== filters.mvt) return;
-      total += metric === "brd" ? r[6] : r[7];
+
+      matchingMats.add(r[4]);
+      const key = r[4] + "|" + r[8];
+      const cur = matDate.get(key);
+      if (cur) { cur.brd += r[6]; cur.kg += r[7]; }
+      else matDate.set(key, { brd: r[6], kg: r[7] });
     });
+
+    return { matchingMats, matDate, bahanDate };
+  }
+
+  function _smtMatVal(pre, matIdx, periodDates, metric) {
+    let total = 0;
+    for (const d of periodDates) {
+      const v = pre.matDate.get(matIdx + "|" + d);
+      if (v) total += metric === "brd" ? v.brd : v.kg;
+    }
+    return total;
+  }
+
+  function _smtBahan(pre, periodDates) {
+    let total = 0;
+    for (const d of periodDates) total += pre.bahanDate.get(d) || 0;
     return total;
   }
 
@@ -1553,11 +1580,14 @@ const OverviewTablePage = (() => {
 
     const dates = getSmtDates();
 
+    // Single-pass precomputation
+    const _pre = _precomputeSmt(smtSelectedMaterials.map(m => m.idx), dates, smtFilters);
+
     // Render tags with dimming
-    const hasDimmed = smtSelectedMaterials.some(m => !Engine.materialMatchesFilterRange(m.idx, smtFilters, dates));
+    const hasDimmed = smtSelectedMaterials.some(m => !_pre.matchingMats.has(m.idx));
     tagsEl.innerHTML =
       smtSelectedMaterials.map((m, i) => {
-        const matches = Engine.materialMatchesFilterRange(m.idx, smtFilters, dates);
+        const matches = _pre.matchingMats.has(m.idx);
         return `<span class="material-tag ${matches ? "" : "dimmed"}" data-i="${i}">
           ${m.matdesc}
           <span class="material-tag-remove" data-i="${i}">×</span>
@@ -1634,7 +1664,7 @@ const OverviewTablePage = (() => {
     let bahanPerCol = {};
     if (isPct) {
       columns.forEach(col => {
-        bahanPerCol[col.key] = calcBahanKgForPeriod(col.dates, smtFilters);
+        bahanPerCol[col.key] = _smtBahan(_pre, col.dates);
       });
     }
 
@@ -1643,13 +1673,13 @@ const OverviewTablePage = (() => {
       let totalKg = 0, totalBahan = 0;
       columns.forEach(col => {
         if (isPct) {
-          const kg = calcPerMaterialPerPeriod(m.idx, col.dates, smtFilters, "kg");
+          const kg = _smtMatVal(_pre, m.idx, col.dates, "kg");
           const bahan = bahanPerCol[col.key];
           row.values[col.key] = bahan ? Math.round(kg / bahan * 10000) / 100 : 0;
           totalKg += kg;
           totalBahan += bahan;
         } else {
-          const val = calcPerMaterialPerPeriod(m.idx, col.dates, smtFilters, smtMetric);
+          const val = _smtMatVal(_pre, m.idx, col.dates, smtMetric);
           row.values[col.key] = val;
           row.total += val;
         }
@@ -1660,7 +1690,7 @@ const OverviewTablePage = (() => {
       return row;
     });
 
-    // Column totals
+    // Column totals (derived from rows, no re-scan)
     const colTotals = {};
     let grandTotal = 0;
     if (isPct) {
@@ -1669,7 +1699,7 @@ const OverviewTablePage = (() => {
         const bahan = bahanPerCol[col.key];
         let colKg = 0;
         smtSelectedMaterials.forEach(m => {
-          colKg += calcPerMaterialPerPeriod(m.idx, col.dates, smtFilters, "kg");
+          colKg += _smtMatVal(_pre, m.idx, col.dates, "kg");
         });
         colTotals[col.key] = bahan ? Math.round(colKg / bahan * 10000) / 100 : 0;
         allKg += colKg;
@@ -1700,14 +1730,14 @@ const OverviewTablePage = (() => {
           ${rows.map(r => `
             <tr>
               <td class="smt-mat-cell" title="${r.matdesc}">${r.matdesc}</td>
-              ${columns.map(c => `<td>${fmtVal(r.values[c.key])}</td>`).join("")}
-              <td><strong>${fmtVal(r.total)}</strong></td>
+              ${columns.map(c => `<td data-v="${r.values[c.key]}">${fmtVal(r.values[c.key])}</td>`).join("")}
+              <td data-v="${r.total}"><strong>${fmtVal(r.total)}</strong></td>
             </tr>
           `).join("")}
           <tr class="smt-total-row">
             <td><strong>Total</strong></td>
-            ${columns.map(c => `<td><strong>${fmtVal(colTotals[c.key])}</strong></td>`).join("")}
-            <td><strong>${fmtVal(grandTotal)}</strong></td>
+            ${columns.map(c => `<td data-v="${colTotals[c.key]}"><strong>${fmtVal(colTotals[c.key])}</strong></td>`).join("")}
+            <td data-v="${grandTotal}"><strong>${fmtVal(grandTotal)}</strong></td>
           </tr>
         </tbody>
       </table>
@@ -2069,7 +2099,7 @@ const OverviewTablePage = (() => {
     if (!table) return;
 
     const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.table_to_sheet(table);
+    const ws = exportSheetWithRaw(table);
     XLSX.utils.book_append_sheet(wb, ws, "Search Material");
     XLSX.writeFile(wb, `Search_Material_${smtMetric}_${smtPeriod}_${new Date().toISOString().slice(0, 10)}.xlsx`);
   }

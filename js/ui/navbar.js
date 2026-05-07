@@ -4,32 +4,63 @@
 
 const Navbar = (() => {
   let viewMode = 'chart'; // 'chart' or 'table'
+  let _bound = false;
+
+  function closeSidebar() {
+    document.querySelector('.sidebar')?.classList.remove('open');
+    document.querySelector('.sidebar-overlay')?.classList.remove('show');
+  }
 
   function init() {
-    document.querySelectorAll('.nav-item').forEach(item => {
-      item.addEventListener('click', (e) => {
-        e.preventDefault();
-        const page = viewMode === 'table' ? item.dataset.pageTable : item.dataset.page;
-        navigateTo(page);
-      });
-    });
+    if (!_bound) {
+      _bound = true;
 
-    // View toggle dropdown
-    const viewSelect = document.getElementById('viewModeSelect');
-    viewSelect.addEventListener('change', () => {
-      viewMode = viewSelect.value;
-      const activeItem = document.querySelector('.nav-item.active');
-      if (activeItem) {
-        const page = viewMode === 'table' ? activeItem.dataset.pageTable : activeItem.dataset.page;
-        navigateTo(page);
+      // Mobile: logo click toggles sidebar
+      const mobileLogo = document.getElementById('topbarLogoMobile');
+      const sidebar = document.querySelector('.sidebar');
+      if (mobileLogo && sidebar) {
+        let overlay = document.querySelector('.sidebar-overlay');
+        if (!overlay) {
+          overlay = document.createElement('div');
+          overlay.className = 'sidebar-overlay';
+          document.body.appendChild(overlay);
+        }
+        mobileLogo.addEventListener('click', () => {
+          sidebar.classList.toggle('open');
+          overlay.classList.toggle('show');
+        });
+        overlay.addEventListener('click', closeSidebar);
       }
-    });
+
+      document.querySelectorAll('.nav-item').forEach(item => {
+        item.addEventListener('click', (e) => {
+          e.preventDefault();
+          closeSidebar();
+          const page = viewMode === 'table' ? item.dataset.pageTable : item.dataset.page;
+          navigateTo(page);
+        });
+      });
+
+      // View toggle buttons
+      const toggleBtns = document.querySelectorAll('.view-toggle-btn');
+      toggleBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+          viewMode = btn.dataset.mode;
+          toggleBtns.forEach(b => b.classList.toggle('active', b.dataset.mode === viewMode));
+          const activeItem = document.querySelector('.nav-item.active');
+          if (activeItem) {
+            const page = viewMode === 'table' ? activeItem.dataset.pageTable : activeItem.dataset.page;
+            navigateTo(page);
+          }
+        });
+      });
+    }
 
     // Handle hash on load
     const hash = location.hash.slice(1) || 'overview';
     if (hash.endsWith('-table')) {
       viewMode = 'table';
-      viewSelect.value = 'table';
+      document.querySelectorAll('.view-toggle-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === 'table'));
     }
     navigateTo(hash);
   }
