@@ -344,9 +344,9 @@ const OverviewTablePage = (() => {
           ${rows.length ? rows.map(r => `
             <tr class="${r.date === latestDate ? 'row-latest' : ''}">
               <td>${r.label}</td>
-              <td data-v="${r.yk}" class="${r.yk < 74.5 ? 'val-danger' : ''}">${r.yk.toFixed(2)}</td>
+              <td data-v="${r.yk}">${r.yk < 74.5 ? '<span class="val-danger">' + r.yk.toFixed(2) + '</span>' : r.yk.toFixed(2)}</td>
               <td data-v="${r.yb}">${r.yb.toFixed(2)}</td>
-              <td data-v="${r.w}" class="${r.w > 4.5 ? 'val-danger' : ''}">${r.w.toFixed(2)}</td>
+              <td data-v="${r.w}">${r.w > 4.5 ? '<span class="val-danger">' + r.w.toFixed(2) + '</span>' : r.w.toFixed(2)}</td>
               <td data-v="${r.susut}">${r.susut.toFixed(2)}</td>
             </tr>
           `).join("") : `<tr><td colspan="5" class="table-empty">Tidak ada data untuk periode ini.</td></tr>`}
