@@ -9,9 +9,17 @@ const App = (() => {
     await DB.open();
 
     const session = await Auth.getSession();
-    if (!session) {
+    const hadSession = !!session && !Auth.shouldRestoreSession();
+    if (!session || hadSession) {
+      if (session) await DB.getClient().auth.signOut();
       Auth.showLogin();
       Auth.initLoginUI();
+      if (hadSession) {
+        const modal = document.getElementById('sessionModal');
+        const btn = document.getElementById('sessionModalBtn');
+        modal.classList.add('show');
+        btn.onclick = () => modal.classList.remove('show');
+      }
       Auth.onAuthChange((s) => {
         if (s) {
           Auth.showApp();
@@ -28,7 +36,11 @@ const App = (() => {
     Auth.showApp();
     Auth.initLoginUI();
     Auth.onAuthChange((s) => {
-      if (!s) {
+      if (s) {
+        Auth.showApp();
+        Auth.startIdleWatch();
+        boot();
+      } else {
         Auth.stopIdleWatch();
         Auth.showLogin();
       }

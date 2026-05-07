@@ -12,14 +12,26 @@ const Auth = (() => {
     return data.session;
   }
 
+  function shouldRestoreSession() {
+    return localStorage.getItem('rememberMe') === '1' || sessionStorage.getItem('sessionActive') === '1';
+  }
+
   async function getUser() {
     const session = await getSession();
     return session ? session.user : null;
   }
 
-  async function signIn(email, password) {
+  async function signIn(email, password, remember) {
     const { data, error } = await getClient().auth.signInWithPassword({ email, password });
     if (error) throw error;
+    if (remember) {
+      localStorage.setItem('rememberMe', '1');
+      localStorage.setItem('savedCredentials', JSON.stringify({ email, password }));
+    } else {
+      localStorage.removeItem('rememberMe');
+      localStorage.removeItem('savedCredentials');
+      sessionStorage.setItem('sessionActive', '1');
+    }
     return data;
   }
 
@@ -30,6 +42,9 @@ const Auth = (() => {
   }
 
   async function signOut() {
+    localStorage.removeItem('rememberMe');
+    sessionStorage.removeItem('sessionActive');
+    _role = null;
     const { error } = await getClient().auth.signOut();
     if (error) throw error;
     showLogin();
@@ -45,14 +60,29 @@ const Auth = (() => {
     document.getElementById('loginScreen').style.display = 'flex';
     document.getElementById('sidebar').style.display = 'none';
     document.querySelector('.main').style.display = 'none';
-    const form = document.getElementById('loginForm');
-    if (form) form.reset();
     const errorEl = document.getElementById('loginError');
     if (errorEl) errorEl.textContent = '';
     const submitBtn = document.getElementById('loginBtn');
     if (submitBtn) submitBtn.disabled = false;
     const submitLabel = document.getElementById('loginBtnLabel');
     if (submitLabel) submitLabel.textContent = 'Sign In';
+
+    const saved = localStorage.getItem('savedCredentials');
+    const emailInput = document.getElementById('loginEmail');
+    const passInput = document.getElementById('loginPassword');
+    const rememberChk = document.getElementById('rememberMe');
+    if (saved) {
+      try {
+        const cred = JSON.parse(saved);
+        if (emailInput) emailInput.value = cred.email || '';
+        if (passInput) passInput.value = cred.password || '';
+        if (rememberChk) rememberChk.checked = true;
+      } catch (_) {}
+    } else {
+      if (emailInput) emailInput.value = '';
+      if (passInput) passInput.value = '';
+      if (rememberChk) rememberChk.checked = false;
+    }
   }
 
   let _role = null;
@@ -104,8 +134,9 @@ const Auth = (() => {
       submitBtn.disabled = true;
       submitLabel.textContent = 'Loading...';
 
+      const remember = document.getElementById('rememberMe')?.checked ?? false;
       try {
-        await signIn(emailInput.value, passInput.value);
+        await signIn(emailInput.value, passInput.value, remember);
       } catch (err) {
         errorEl.style.color = 'var(--red)';
         errorEl.textContent = err.message;
@@ -122,15 +153,17 @@ const Auth = (() => {
   }
 
   // ── Idle timeout (10 minutes) ──
-  const IDLE_TIMEOUT = 30 * 60 * 1000;
+  const IDLE_TIMEOUT = 15 * 60 * 1000;
   let _idleTimer = null;
 
   function _resetIdleTimer() {
     if (_idleTimer) clearTimeout(_idleTimer);
     _idleTimer = setTimeout(async () => {
       stopIdleWatch();
-      await getClient().auth.signOut();
+      localStorage.removeItem('rememberMe');
+      sessionStorage.removeItem('sessionActive');
       _role = null;
+      await getClient().auth.signOut();
       const modal = document.getElementById('sessionModal');
       const btn = document.getElementById('sessionModalBtn');
       modal.classList.add('show');
@@ -154,5 +187,5 @@ const Auth = (() => {
     events.forEach(ev => document.removeEventListener(ev, _resetIdleTimer));
   }
 
-  return { getSession, getUser, getRole, isAdmin, signIn, signUp, signOut, onAuthChange, showLogin, showApp, applyRole, initLoginUI, startIdleWatch, stopIdleWatch };
+  return { getSession, shouldRestoreSession, getUser, getRole, isAdmin, signIn, signUp, signOut, onAuthChange, showLogin, showApp, applyRole, initLoginUI, startIdleWatch, stopIdleWatch };
 })();
