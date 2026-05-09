@@ -168,7 +168,7 @@ const Auth = (() => {
     });
   }
 
-  // ── Idle timeout (10 minutes) ──
+  // ── Idle timeout (15 minutes) ──
   const IDLE_TIMEOUT = 15 * 60 * 1000;
   let _idleTimer = null;
 

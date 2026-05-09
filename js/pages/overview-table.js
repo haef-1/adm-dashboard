@@ -218,7 +218,7 @@ const OverviewTablePage = (() => {
   function getWeekMap(dates) {
     const map = {};
     dates.forEach(d => {
-      const key = "W" + KPI.getISOWeek(d);
+      const key = d.slice(0, 4) + "-W" + KPI.getISOWeek(d);
       if (!map[key]) map[key] = [];
       map[key].push(d);
     });
@@ -614,7 +614,7 @@ const OverviewTablePage = (() => {
     let items = [];
     if (period === "weekly") {
       const wm = getWeekMap(dates);
-      items = Object.keys(wm).map(k => ({ key: k, label: k }));
+      items = Object.keys(wm).map(k => ({ key: k, label: "W" + k.split("-W")[1] }));
     } else {
       const mm = getMonthMap(dates);
       items = Object.keys(mm).map(k => ({ key: k, label: KPI.formatMonthYear(k) }));
@@ -1149,7 +1149,7 @@ const OverviewTablePage = (() => {
     let items = [];
     if (bhnPeriod === "weekly") {
       const wm = getWeekMap(dates);
-      items = Object.keys(wm).map(k => ({ key: k, label: k }));
+      items = Object.keys(wm).map(k => ({ key: k, label: "W" + k.split("-W")[1] }));
     } else {
       const mm = getMonthMap(dates);
       items = Object.keys(mm).map(k => ({ key: k, label: KPI.formatMonthYear(k) }));
@@ -1466,7 +1466,7 @@ const OverviewTablePage = (() => {
     const all = Engine.getAvailableDates();
     if (smtSelectedItems) {
       const keySet = new Set(smtSelectedItems);
-      if (smtPeriod === "weekly") return all.filter(d => keySet.has("W" + KPI.getISOWeek(d)));
+      if (smtPeriod === "weekly") return all.filter(d => keySet.has(d.slice(0, 4) + "-W" + KPI.getISOWeek(d)));
       if (smtPeriod === "monthly") return all.filter(d => keySet.has(d.slice(0, 7)));
       return all.filter(d => keySet.has(d));
     }
@@ -1478,7 +1478,7 @@ const OverviewTablePage = (() => {
     if (smtPeriod === "weekly") {
       const weeks = Object.keys(getWeekMap(all));
       const lastKeys = new Set(weeks.slice(-7));
-      return all.filter(d => lastKeys.has("W" + KPI.getISOWeek(d)));
+      return all.filter(d => lastKeys.has(d.slice(0, 4) + "-W" + KPI.getISOWeek(d)));
     }
     if (smtPeriod === "monthly") {
       const months = Object.keys(getMonthMap(all));
@@ -1501,7 +1501,7 @@ const OverviewTablePage = (() => {
       const weekMap = getWeekMap(dates);
       return Object.keys(weekMap).map(wk => ({
         key: wk,
-        label: "W" + wk.slice(1) + ", " + weekMap[wk][0].split("-")[0],
+        label: "W" + wk.split("-W")[1] + ", " + wk.split("-W")[0],
         dates: weekMap[wk],
       }));
     } else {
@@ -2008,7 +2008,7 @@ const OverviewTablePage = (() => {
     let items = [];
     if (smtPeriod === "weekly") {
       const wm = getWeekMap(dates);
-      items = Object.keys(wm).map(k => ({ key: k, label: k }));
+      items = Object.keys(wm).map(k => ({ key: k, label: "W" + k.split("-W")[1] }));
     } else {
       const mm = getMonthMap(dates);
       items = Object.keys(mm).map(k => ({ key: k, label: KPI.formatMonthYear(k) }));

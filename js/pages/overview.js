@@ -419,7 +419,7 @@ const OverviewPage = (() => {
   function getWeekMap(dates) {
     const map = {};
     dates.forEach((d) => {
-      const key = "W" + KPI.getISOWeek(d);
+      const key = d.slice(0, 4) + "-W" + KPI.getISOWeek(d);
       if (!map[key]) map[key] = [];
       map[key].push(d);
     });
@@ -429,7 +429,7 @@ const OverviewPage = (() => {
   function getMonthMap(dates) {
     const map = {};
     dates.forEach((d) => {
-      const key = MONTH_NAMES[parseInt(d.slice(5, 7))];
+      const key = d.slice(0, 7);
       if (!map[key]) map[key] = [];
       map[key].push(d);
     });
@@ -463,7 +463,7 @@ const OverviewPage = (() => {
         ? allKeys.filter((k) => chartSelectedItems.includes(k))
         : allKeys.slice(-MAX);
       weekKeys.forEach((wk) => {
-        labels.push(wk);
+        labels.push("W" + wk.split("-W")[1]);
         const dist = Engine.getBahanDistribution(
           weekMap[wk],
           chartPvMode,
@@ -484,7 +484,7 @@ const OverviewPage = (() => {
         ? allKeys.filter((k) => chartSelectedItems.includes(k))
         : allKeys.slice(-MAX);
       mKeys.forEach((mk) => {
-        labels.push(mk);
+        labels.push(MONTH_NAMES[parseInt(mk.slice(5, 7))]);
         const dist = Engine.getBahanDistribution(
           monthMap[mk],
           chartPvMode,
@@ -541,11 +541,11 @@ const OverviewPage = (() => {
     // Weekly / monthly: flat grid UI
     let items = [];
     if (chartPeriod === "weekly") {
-      items = Object.keys(getWeekMap(dates)).map((k) => ({ key: k, label: k }));
+      items = Object.keys(getWeekMap(dates)).map((k) => ({ key: k, label: "W" + k.split("-W")[1] }));
     } else {
       items = Object.keys(getMonthMap(dates)).map((k) => ({
         key: k,
-        label: k,
+        label: MONTH_NAMES[parseInt(k.slice(5, 7))],
       }));
     }
 

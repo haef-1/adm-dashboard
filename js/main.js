@@ -24,7 +24,7 @@ const App = (() => {
         if (s) {
           Auth.showApp();
           Auth.startIdleWatch();
-          boot();
+          boot().catch(err => console.error('Boot failed:', err));
         } else {
           Auth.stopIdleWatch();
           Auth.showLogin();
@@ -39,7 +39,7 @@ const App = (() => {
       if (s) {
         Auth.showApp();
         Auth.startIdleWatch();
-        boot();
+        boot().catch(err => console.error('Boot failed:', err));
       } else {
         Auth.stopIdleWatch();
         Auth.showLogin();

@@ -102,12 +102,12 @@ const KarkasPage = (() => {
   // ═══════════════════════════════════════
   function getWeekMap(dates) {
     const map = {};
-    dates.forEach(d => { const key = 'W' + KPI.getISOWeek(d); if (!map[key]) map[key] = []; map[key].push(d); });
+    dates.forEach(d => { const key = d.slice(0, 4) + '-W' + KPI.getISOWeek(d); if (!map[key]) map[key] = []; map[key].push(d); });
     return map;
   }
   function getMonthMap(dates) {
     const map = {};
-    dates.forEach(d => { const key = MONTHS_SHORT[parseInt(d.slice(5, 7)) - 1]; if (!map[key]) map[key] = []; map[key].push(d); });
+    dates.forEach(d => { const key = d.slice(0, 7); if (!map[key]) map[key] = []; map[key].push(d); });
     return map;
   }
   function fmtDateShort(d) {
@@ -268,9 +268,9 @@ const KarkasPage = (() => {
     daily.forEach(r => {
       let key;
       if (yPeriod === 'weekly') {
-        key = 'W' + KPI.getISOWeek(r.ymd);
+        key = r.ymd.slice(0, 4) + '-W' + KPI.getISOWeek(r.ymd);
       } else {
-        key = MONTHS_SHORT[parseInt(r.ymd.slice(5, 7)) - 1];
+        key = r.ymd.slice(0, 7);
       }
       if (!groupMap[key]) { groupMap[key] = { bahan: 0, hasil: 0, byprod: 0 }; groupOrder.push(key); }
       groupMap[key].bahan += r.bahan;
@@ -303,12 +303,14 @@ const KarkasPage = (() => {
     } else if (yPeriod === 'weekly') {
       const keys = Object.keys(getWeekMap(dates));
       const selKeys = ySelectedItems || keys;
-      if (selKeys.length) rangeLabel = selKeys[0] + ' – ' + selKeys[selKeys.length - 1];
+      const fmtWk = k => "W" + k.split("-W")[1];
+      if (selKeys.length) rangeLabel = fmtWk(selKeys[0]) + ' – ' + fmtWk(selKeys[selKeys.length - 1]);
       else rangeLabel = 'Pilih minggu';
     } else {
       const keys = Object.keys(getMonthMap(dates));
       const selKeys = ySelectedItems || keys;
-      if (selKeys.length) rangeLabel = selKeys[0] + ' – ' + selKeys[selKeys.length - 1];
+      const fmtMo = k => MONTHS_SHORT[parseInt(k.slice(5, 7)) - 1];
+      if (selKeys.length) rangeLabel = fmtMo(selKeys[0]) + ' – ' + fmtMo(selKeys[selKeys.length - 1]);
       else rangeLabel = 'Pilih bulan';
     }
     navEl.innerHTML = '<button class="chart-range-btn" id="yRangeBtn">' + rangeLabel + '</button>';
@@ -350,8 +352,11 @@ const KarkasPage = (() => {
         return dd + ' ' + MONTHS_SHORT[parseInt(mm, 10) - 1];
       });
     } else {
-      xLabels = fd.map(r => r.d);
-      fullLabels = fd.map(r => r.d);
+      xLabels = fd.map(r => {
+        if (yPeriod === 'weekly') return "W" + r.d.split("-W")[1];
+        return MONTHS_SHORT[parseInt(r.d.slice(5, 7)) - 1];
+      });
+      fullLabels = xLabels;
     }
 
     const sorted = [...metrics].sort((a, b) => a.av - b.av);
@@ -615,14 +620,17 @@ const KarkasPage = (() => {
     const allKeys = sGetCurrentKeys();
     const sel = sGetSelectedKeys();
     let rangeLabel;
+    function fmtKey(k) {
+      if (sPeriod === 'daily') return fmtDateShort(k);
+      if (sPeriod === 'weekly') return "W" + k.split("-W")[1];
+      return MONTHS_SHORT[parseInt(k.slice(5, 7)) - 1];
+    }
     if (sel.length === 0) {
       rangeLabel = sPeriod === 'daily' ? 'Pilih tanggal' : sPeriod === 'weekly' ? 'Pilih minggu' : 'Pilih bulan';
     } else if (sel.length === 1) {
-      rangeLabel = sPeriod === 'daily' ? fmtDateShort(sel[0]) : sel[0];
+      rangeLabel = fmtKey(sel[0]);
     } else {
-      const f = sPeriod === 'daily' ? fmtDateShort(sel[0]) : sel[0];
-      const t = sPeriod === 'daily' ? fmtDateShort(sel[sel.length - 1]) : sel[sel.length - 1];
-      rangeLabel = f + ' – ' + t;
+      rangeLabel = fmtKey(sel[0]) + ' – ' + fmtKey(sel[sel.length - 1]);
     }
     const canPrev = sel.length > 0 && allKeys.indexOf(sel[0]) > 0;
     const canNext = sel.length > 0 && allKeys.indexOf(sel[sel.length - 1]) < allKeys.length - 1;
@@ -973,9 +981,9 @@ const KarkasPage = (() => {
     const GRID_MAX = MAX;
     let items = [];
     if (period === 'weekly') {
-      items = Object.keys(getWeekMap(dates)).map(k => ({ key: k, label: k }));
+      items = Object.keys(getWeekMap(dates)).map(k => ({ key: k, label: "W" + k.split("-W")[1] }));
     } else {
-      items = Object.keys(getMonthMap(dates)).map(k => ({ key: k, label: k }));
+      items = Object.keys(getMonthMap(dates)).map(k => ({ key: k, label: MONTHS_SHORT[parseInt(k.slice(5, 7)) - 1] }));
     }
 
     let pickStart = Math.max(0, items.length - GRID_MAX);
