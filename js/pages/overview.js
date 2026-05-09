@@ -713,7 +713,7 @@ const OverviewPage = (() => {
         clickPhase === 0 ? "Pilih tanggal mulai" : "Pilih tanggal akhir";
       popup.innerHTML = `
         <div class="range-picker-header">
-          <span class="range-picker-title">${hint} <span class="range-picker-hint">(maks ${MAX} hari)</span></span>
+          <span class="range-picker-title">${hint} <span class="range-picker-hint">(maks ${MAX} data)</span></span>
           <button class="range-picker-close" id="rpClose">×</button>
         </div>
         <div class="range-daily-summary">
@@ -838,13 +838,12 @@ const OverviewPage = (() => {
         const inRange = from && to && dateStr >= from && dateStr <= to;
         const isEndpoint = dateStr === fromDate || dateStr === toDate;
 
-        // Phase 1: disable dates too far from fromDate
         let tooFar = false;
         if (!isFuture && clickPhase === 1 && fromDate) {
-          const diff = Math.round(
-            (new Date(dateStr) - new Date(fromDate)) / 86400000,
-          );
-          if (Math.abs(diff) >= MAX) tooFar = true;
+          const lo = fromDate < dateStr ? fromDate : dateStr;
+          const hi = fromDate < dateStr ? dateStr : fromDate;
+          const dataCount = dates.filter(d => d >= lo && d <= hi).length;
+          if (dataCount > MAX) tooFar = true;
         }
 
         const cell = document.createElement("div");

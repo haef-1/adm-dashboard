@@ -100,10 +100,24 @@ const Auth = (() => {
 
   function isAdmin() { return _role === 'admin'; }
 
-  function showApp() {
+  async function showApp() {
     document.getElementById('loginScreen').style.display = 'none';
     document.getElementById('sidebar').style.display = '';
     document.querySelector('.main').style.display = '';
+    const user = await getUser();
+    const el = document.getElementById('topbarUser');
+    if (el && user) {
+      const name = user.user_metadata?.full_name || user.email.split('@')[0];
+      el.innerHTML = `
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        <span>${name}</span>
+        <button class="topbar-logout-btn" id="btnLogout" title="Logout">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        </button>`;
+      el.querySelector('#btnLogout').addEventListener('click', () => {
+        document.getElementById('logoutModal').classList.add('show');
+      });
+    }
   }
 
   async function applyRole() {
@@ -145,11 +159,13 @@ const Auth = (() => {
       }
     });
 
-    // Logout button
-    const logoutBtn = document.getElementById('btnLogout');
-    if (logoutBtn) {
-      logoutBtn.addEventListener('click', () => signOut());
-    }
+    document.getElementById('logoutYes')?.addEventListener('click', () => {
+      document.getElementById('logoutModal').classList.remove('show');
+      signOut();
+    });
+    document.getElementById('logoutNo')?.addEventListener('click', () => {
+      document.getElementById('logoutModal').classList.remove('show');
+    });
   }
 
   // ── Idle timeout (10 minutes) ──

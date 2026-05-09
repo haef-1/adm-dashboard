@@ -68,7 +68,7 @@ const App = (() => {
       return;
     }
 
-    showSeedOverlay('LOADING DATA...');
+    showSeedOverlay('loading bentar..');
 
     const latestRows = await DB.loadMonth(months[0]);
     Engine.setRawDB(latestRows);

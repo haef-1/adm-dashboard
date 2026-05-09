@@ -1464,11 +1464,26 @@ const OverviewTablePage = (() => {
 
   function getSmtDates() {
     const all = Engine.getAvailableDates();
-    if (smtSelectedItems) return all.filter(d => smtSelectedItems.includes(d));
+    if (smtSelectedItems) {
+      const keySet = new Set(smtSelectedItems);
+      if (smtPeriod === "weekly") return all.filter(d => keySet.has("W" + KPI.getISOWeek(d)));
+      if (smtPeriod === "monthly") return all.filter(d => keySet.has(d.slice(0, 7)));
+      return all.filter(d => keySet.has(d));
+    }
     if (smtSelectedFrom && smtSelectedTo) {
       const f = smtSelectedFrom <= smtSelectedTo ? smtSelectedFrom : smtSelectedTo;
       const t = smtSelectedFrom <= smtSelectedTo ? smtSelectedTo : smtSelectedFrom;
       return all.filter(d => d >= f && d <= t);
+    }
+    if (smtPeriod === "weekly") {
+      const weeks = Object.keys(getWeekMap(all));
+      const lastKeys = new Set(weeks.slice(-7));
+      return all.filter(d => lastKeys.has("W" + KPI.getISOWeek(d)));
+    }
+    if (smtPeriod === "monthly") {
+      const months = Object.keys(getMonthMap(all));
+      const lastKeys = new Set(months.slice(-7));
+      return all.filter(d => lastKeys.has(d.slice(0, 7)));
     }
     return all.slice(-7);
   }

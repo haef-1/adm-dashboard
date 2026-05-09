@@ -48,12 +48,15 @@
     <!-- SIDEBAR -->
     <aside class="sidebar" id="sidebar" style="display:none">
       <div class="sidebar-header">
+        <div class="sidebar-hamburger">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </div>
         <div class="sidebar-logo">P2</div>
       </div>
       <div class="sidebar-view-toggle" id="sidebarViewToggle">
         <div class="view-toggle-group" id="viewModeSelect">
           <button class="view-toggle-btn active" data-mode="chart">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 20V10M12 20V4M6 20V14"/></svg>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 16l4-8 4 4 5-6"/></svg>
             <span class="view-toggle-label">Chart</span>
           </button>
           <button class="view-toggle-btn" data-mode="table">
@@ -85,64 +88,27 @@
           <span class="nav-icon"><img src="images/mdm.png" width="26" height="26" alt="MDM"></span><span class="nav-label">MDM</span>
         </a>
       </nav>
-      <div class="sidebar-footer">©2026 Adm Prod Pml2</div>
+      <div class="sidebar-footer">
+        <button class="sidebar-footer-btn" id="btnImport">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+            <polyline points="17 8 12 3 7 8" />
+            <line x1="12" y1="3" x2="12" y2="15" />
+          </svg>
+          <span class="nav-label">Import</span>
+        </button>
+      </div>
     </aside>
 
     <!-- MAIN AREA -->
     <main class="main" style="display:none">
       <!-- TOPBAR -->
       <header class="topbar">
-        <div class="topbar-logo-mobile" id="topbarLogoMobile">P2</div>
-        <div class="topbar-brand">Pemalang 2</div>
-        <div class="topbar-search">
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-          >
-            <circle cx="11" cy="11" r="8" />
-            <path d="M21 21l-4.35-4.35" />
-          </svg>
-          <input
-            type="text"
-            placeholder="Search"
-            disabled
-            class="search-input"
-          />
+        <div class="topbar-logo-mobile" id="topbarLogoMobile">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
         </div>
-        <button class="btn-import" id="btnImport">
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-          >
-            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
-            <polyline points="17 8 12 3 7 8" />
-            <line x1="12" y1="3" x2="12" y2="15" />
-          </svg>
-          Import
-        </button>
-        <button class="btn-logout" id="btnLogout">
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-          >
-            <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
-            <polyline points="16 17 21 12 16 7" />
-            <line x1="21" y1="12" x2="9" y2="12" />
-          </svg>
-          Logout
-        </button>
+        <div class="topbar-brand">Pemalang 2</div>
+        <div class="topbar-user" id="topbarUser"></div>
         <input
           type="file"
           id="fileImport"
@@ -157,6 +123,21 @@
       </div>
     </main>
 
+    <!-- LOGOUT CONFIRMATION MODAL -->
+    <div class="session-modal-overlay" id="logoutModal">
+      <div class="session-modal">
+        <div class="session-modal-icon">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        </div>
+        <h3 class="session-modal-title">Logout</h3>
+        <p class="session-modal-msg">Yakin ingin keluar?</p>
+        <div class="logout-modal-actions">
+          <button class="logout-modal-btn logout-no" id="logoutNo">Batal</button>
+          <button class="logout-modal-btn logout-yes" id="logoutYes">Ya, Logout</button>
+        </div>
+      </div>
+    </div>
+
     <!-- SESSION EXPIRED MODAL -->
     <div class="session-modal-overlay" id="sessionModal">
       <div class="session-modal">
@@ -169,14 +150,14 @@
 
     <!-- IMPORT OVERLAY -->
     <div class="import-overlay" id="importOverlay">
-      <div class="import-spinner"></div>
+      <img src="images/karkas.png" class="import-icon-bounce" alt="Loading" width="48" height="48" />
       <div class="import-label">MEMPROSES...</div>
     </div>
     <div class="import-toast" id="importToast"></div>
 
     <!-- BACKGROUND LOADER (non-blocking) -->
     <div class="bg-loader" id="bgLoader">
-      <div class="bg-loader-spinner"></div>
+      <img src="images/karkas.png" class="bg-loader-icon" alt="Loading" width="20" height="20" />
       <div class="bg-loader-text">
         <span class="bg-loader-title">Loading history</span>
         <span class="bg-loader-label"></span>
