@@ -298,20 +298,35 @@ const KarkasPage = (() => {
     let rangeLabel;
     if (yPeriod === 'daily') {
       const range = ySelectedItems || (ySelectedFrom && ySelectedTo ? dates.filter(d => d >= ySelectedFrom && d <= ySelectedTo) : dates.slice(-7));
-      if (range.length) rangeLabel = fmtDateShort(range[0]) + ' – ' + fmtDateShort(range[range.length - 1]);
-      else rangeLabel = 'Pilih tanggal';
+      if (range.length) {
+        const a = range[0], b = range[range.length - 1];
+        const yA = a.split('-')[0], yB = b.split('-')[0];
+        rangeLabel = yA === yB
+          ? fmtDateShort(a) + ' – ' + fmtDateShort(b) + ' ' + yB
+          : fmtDateFull(a) + ' – ' + fmtDateFull(b);
+      } else rangeLabel = 'Pilih tanggal';
     } else if (yPeriod === 'weekly') {
       const keys = Object.keys(getWeekMap(dates));
       const selKeys = ySelectedItems || keys;
-      const fmtWk = k => "W" + k.split("-W")[1];
-      if (selKeys.length) rangeLabel = fmtWk(selKeys[0]) + ' – ' + fmtWk(selKeys[selKeys.length - 1]);
-      else rangeLabel = 'Pilih minggu';
+      if (selKeys.length) {
+        const a = selKeys[0], b = selKeys[selKeys.length - 1];
+        const wA = 'W' + a.split('-W')[1], wB = 'W' + b.split('-W')[1];
+        const yA = a.split('-')[0], yB = b.split('-')[0];
+        rangeLabel = yA === yB
+          ? wA + ' – ' + wB + ' ' + yA
+          : wA + ' ' + yA + ' – ' + wB + ' ' + yB;
+      } else rangeLabel = 'Pilih minggu';
     } else {
       const keys = Object.keys(getMonthMap(dates));
       const selKeys = ySelectedItems || keys;
-      const fmtMo = k => MONTHS_SHORT[parseInt(k.slice(5, 7)) - 1];
-      if (selKeys.length) rangeLabel = fmtMo(selKeys[0]) + ' – ' + fmtMo(selKeys[selKeys.length - 1]);
-      else rangeLabel = 'Pilih bulan';
+      if (selKeys.length) {
+        const a = selKeys[0], b = selKeys[selKeys.length - 1];
+        const mA = MONTHS_SHORT[parseInt(a.slice(5, 7)) - 1], mB = MONTHS_SHORT[parseInt(b.slice(5, 7)) - 1];
+        const yA = a.split('-')[0], yB = b.split('-')[0];
+        rangeLabel = yA === yB
+          ? mA + ' – ' + mB + ' ' + yA
+          : mA + ' ' + yA + ' – ' + mB + ' ' + yB;
+      } else rangeLabel = 'Pilih bulan';
     }
     navEl.innerHTML = '<button class="chart-range-btn" id="yRangeBtn">' + rangeLabel + '</button>';
     document.getElementById('yRangeBtn').addEventListener('click', () => openRangePicker('yield'));
@@ -620,17 +635,30 @@ const KarkasPage = (() => {
     const allKeys = sGetCurrentKeys();
     const sel = sGetSelectedKeys();
     let rangeLabel;
-    function fmtKey(k) {
-      if (sPeriod === 'daily') return fmtDateShort(k);
-      if (sPeriod === 'weekly') return "W" + k.split("-W")[1];
-      return MONTHS_SHORT[parseInt(k.slice(5, 7)) - 1];
-    }
     if (sel.length === 0) {
       rangeLabel = sPeriod === 'daily' ? 'Pilih tanggal' : sPeriod === 'weekly' ? 'Pilih minggu' : 'Pilih bulan';
     } else if (sel.length === 1) {
-      rangeLabel = fmtKey(sel[0]);
+      rangeLabel = sPeriod === 'daily' ? fmtDateFull(sel[0])
+        : sPeriod === 'weekly' ? 'W' + sel[0].split('-W')[1] + ' ' + sel[0].split('-')[0]
+        : MONTHS_SHORT[parseInt(sel[0].slice(5, 7)) - 1] + ' ' + sel[0].split('-')[0];
     } else {
-      rangeLabel = fmtKey(sel[0]) + ' – ' + fmtKey(sel[sel.length - 1]);
+      const a = sel[0], b = sel[sel.length - 1];
+      const yA = a.split('-')[0], yB = b.split('-')[0];
+      if (sPeriod === 'daily') {
+        rangeLabel = yA === yB
+          ? fmtDateShort(a) + ' – ' + fmtDateShort(b) + ' ' + yB
+          : fmtDateFull(a) + ' – ' + fmtDateFull(b);
+      } else if (sPeriod === 'weekly') {
+        const wA = 'W' + a.split('-W')[1], wB = 'W' + b.split('-W')[1];
+        rangeLabel = yA === yB
+          ? wA + ' – ' + wB + ' ' + yA
+          : wA + ' ' + yA + ' – ' + wB + ' ' + yB;
+      } else {
+        const mA = MONTHS_SHORT[parseInt(a.slice(5, 7)) - 1], mB = MONTHS_SHORT[parseInt(b.slice(5, 7)) - 1];
+        rangeLabel = yA === yB
+          ? mA + ' – ' + mB + ' ' + yA
+          : mA + ' ' + yA + ' – ' + mB + ' ' + yB;
+      }
     }
     const canPrev = sel.length > 0 && allKeys.indexOf(sel[0]) > 0;
     const canNext = sel.length > 0 && allKeys.indexOf(sel[sel.length - 1]) < allKeys.length - 1;

@@ -820,7 +820,7 @@
 /* ── Search 2-col layout ── */
 .search-layout {
   display: grid;
-  grid-template-columns: 3fr 2fr;
+  grid-template-columns: 1fr 2fr;
   gap: 0;
 }
 
@@ -832,53 +832,101 @@
 .search-right {
   padding-left: 20px;
   display: flex;
-  gap: 20px;
-  align-items: flex-start;
-}
-
-.search-right-value-col {
-  display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 4px;
 }
 
-.search-right-yield-col {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.search-right-col-label {
-  font-size: 10px;
-  font-weight: 600;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-
-.search-value-item {
+.smt-header-controls {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
-.search-value-box {
-  min-width: 90px;
-  padding: 6px 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+.smt-chart-block {
+  border-bottom: 1px solid var(--border-light);
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+}
+.smt-chart-block:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+.smt-mode-btn {
+  font-size: 10px;
   font-family: var(--font-mono);
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--text);
-  min-height: 32px;
+  font-weight: 600;
+  padding: 4px 12px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--text-mid);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.smt-mode-btn:hover {
+  border-color: var(--blue);
+  background: var(--blue-light);
+  color: var(--blue);
 }
 
-.search-value-unit {
-  font-size: 11px;
+.smt-chart-wrap {
+  position: relative;
+  height: 180px;
+  padding: 0 4px 4px;
+}
+
+.smt-chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  padding: 4px 8px 2px;
+}
+
+.smt-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--text-mid);
+}
+
+.smt-legend-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.smt-legend-name {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.smt-legend-val {
   font-weight: 600;
+  margin-left: 2px;
+}
+
+.smt-legend-date {
+  width: 100%;
+  font-size: 10px;
+  font-weight: 600;
+  font-family: var(--font-mono);
   color: var(--text-muted);
-  letter-spacing: 0.03em;
+  min-height: 14px;
+}
+
+.smt-chart-empty {
+  padding: 40px 16px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 12px;
 }
 
 /* ── Donut ── */

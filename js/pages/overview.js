@@ -18,15 +18,18 @@ const OverviewPage = (() => {
   let _srScrollListener = null;
   let searchFromDate = null;
   let searchToDate = null;
-  let selectedMaterials = []; // [{idx, matdesc, matcode}]
+  let selectedMaterials = []; // [{idx, matdesc, matcode}, ...]
   let searchFilters = { dept: "All", pv: "All", mvt: "All" };
+  let smtMetric = "brd";
+  let smtPeriod = "daily";
+  let smtChartInstances = [];
+  let smtCombined = true;
 
   // ── Main render ──
   function render(container) {
     selectedDate = Engine.getLastDate();
     calMonth = selectedDate ? selectedDate.slice(0, 7) : null;
-    searchFromDate = selectedDate;
-    searchToDate = selectedDate;
+    initSmtDefaultRange();
 
     container.innerHTML = `
       <div class="page-title">Overview</div>
@@ -74,7 +77,7 @@ const OverviewPage = (() => {
         <div class="split-panel" id="searchPanel">
           <div class="split-panel-header">
             <div class="split-panel-title">Search Material</div>
-            <div id="searchDateNav"></div>
+            <div class="smt-header-controls" id="smtHeaderControls"></div>
           </div>
           <div id="searchContainer"></div>
         </div>
@@ -443,6 +446,7 @@ const OverviewPage = (() => {
     const MAX = 7;
     let labels = [],
       dataByDept = { "CUT UP": [], BONELESS: [], AU: [], PARTING: [] };
+    let rangeFirst = null, rangeLast = null;
 
     if (chartPeriod === "daily") {
       const range = chartSelectedItems
@@ -456,6 +460,7 @@ const OverviewPage = (() => {
           dataByDept[dept].push(dist[d]?.[dept] || 0);
         });
       });
+      if (range.length) { rangeFirst = range[0]; rangeLast = range[range.length - 1]; }
     } else if (chartPeriod === "weekly") {
       const weekMap = getWeekMap(dates);
       const allKeys = Object.keys(weekMap);
@@ -477,6 +482,7 @@ const OverviewPage = (() => {
           dataByDept[dept].push(sum);
         });
       });
+      if (weekKeys.length) { rangeFirst = weekKeys[0]; rangeLast = weekKeys[weekKeys.length - 1]; }
     } else {
       const monthMap = getMonthMap(dates);
       const allKeys = Object.keys(monthMap);
@@ -498,6 +504,7 @@ const OverviewPage = (() => {
           dataByDept[dept].push(sum);
         });
       });
+      if (mKeys.length) { rangeFirst = mKeys[0]; rangeLast = mKeys[mKeys.length - 1]; }
     }
 
     const datasets = Object.keys(dataByDept).map((dept) => ({
@@ -509,14 +516,39 @@ const OverviewPage = (() => {
 
     const navEl = document.getElementById("chartRangeNav");
     if (navEl) {
+      const fmtShort = (d) => {
+        const p = d.split("-");
+        return p[2] + " " + MONTH_NAMES[parseInt(p[1])];
+      };
       let rangeLabel;
-      if (labels.length) {
-        rangeLabel = `${labels[0]} – ${labels[labels.length - 1]}`;
+      if (rangeFirst && rangeLast) {
+        if (chartPeriod === "monthly") {
+          const mA = MONTH_NAMES[parseInt(rangeFirst.split("-")[1])];
+          const mB = MONTH_NAMES[parseInt(rangeLast.split("-")[1])];
+          const yA = rangeFirst.split("-")[0], yB = rangeLast.split("-")[0];
+          if (yA === yB) {
+            rangeLabel = mA + " – " + mB + " " + yB;
+          } else {
+            rangeLabel = mA + " " + yA + " – " + mB + " " + yB;
+          }
+        } else if (chartPeriod === "weekly") {
+          const wA = "W" + rangeFirst.split("-W")[1];
+          const wB = "W" + rangeLast.split("-W")[1];
+          const yA = rangeFirst.split("-")[0], yB = rangeLast.split("-")[0];
+          if (yA === yB) {
+            rangeLabel = wA + " – " + wB + " " + yA;
+          } else {
+            rangeLabel = wA + " " + yA + " – " + wB + " " + yB;
+          }
+        } else {
+          const yA = rangeFirst.split("-")[0], yB = rangeLast.split("-")[0];
+          if (yA === yB) {
+            rangeLabel = fmtShort(rangeFirst) + " – " + fmtShort(rangeLast) + " " + yB;
+          } else {
+            rangeLabel = fmtShort(rangeFirst) + " " + yA + " – " + fmtShort(rangeLast) + " " + yB;
+          }
+        }
       } else if (chartSelectedFrom && chartSelectedTo) {
-        const fmtShort = (d) => {
-          const p = d.split("-");
-          return p[2] + " " + MONTH_NAMES[parseInt(p[1])];
-        };
         rangeLabel = `${fmtShort(chartSelectedFrom)} – ${fmtShort(chartSelectedTo)} (kosong)`;
       } else {
         rangeLabel = "Pilih tanggal";
@@ -580,47 +612,69 @@ const OverviewPage = (() => {
 
     function renderGrid() {
       const hint =
-        clickPhase === 0 ? "Klik awal rentang" : "Klik akhir rentang";
+        clickPhase === 0 ? "Pilih awal rentang" : "Pilih akhir rentang";
+      const fromLabel = items[pickStart] ? items[pickStart].label : "—";
+      const toLabel = clickPhase === 0 && items[pickEnd] ? items[pickEnd].label : (clickPhase === 1 ? "—" : "—");
       popup.innerHTML = `
         <div class="range-picker-header">
           <span class="range-picker-title">${hint} <span class="range-picker-hint">(maks ${MAX})</span></span>
           <button class="range-picker-close" id="rpClose">×</button>
         </div>
+        <div class="range-daily-summary">
+          <div class="range-daily-summary-field ${clickPhase === 0 ? "is-active" : ""}">
+            <div class="range-daily-summary-label">Dari</div>
+            <div class="range-daily-summary-val">${fromLabel}</div>
+          </div>
+          <div class="range-daily-summary-arrow">→</div>
+          <div class="range-daily-summary-field ${clickPhase === 1 ? "is-active" : ""}">
+            <div class="range-daily-summary-label">Sampai</div>
+            <div class="range-daily-summary-val">${toLabel}</div>
+          </div>
+        </div>
         <div class="range-picker-grid" id="rpGrid"></div>
         <div class="range-picker-footer">
           <button class="range-picker-reset" id="rpReset">Reset</button>
-          <button class="range-picker-apply" id="rpApply">Terapkan</button>
+          <button class="range-picker-apply" id="rpApply" ${clickPhase === 1 ? "disabled" : ""}>Terapkan</button>
         </div>
       `;
 
       const grid = popup.querySelector("#rpGrid");
       items.forEach((item, idx) => {
         const inRange = idx >= pickStart && idx <= pickEnd;
+        const isEndpoint = idx === pickStart || (clickPhase === 0 && idx === pickEnd);
+        let tooFar = false;
+        if (clickPhase === 1) {
+          const s = Math.min(pickStart, idx);
+          const e = Math.max(pickStart, idx);
+          if (e - s + 1 > MAX) tooFar = true;
+        }
         const cell = document.createElement("div");
         cell.className =
           "range-picker-cell" +
-          (inRange ? " in-range" : "") +
-          (idx === pickStart ? " is-start" : "") +
-          (idx === pickEnd ? " is-end" : "");
+          (inRange && !tooFar ? " in-range" : "") +
+          (isEndpoint ? " is-start" : "") +
+          (tooFar ? " too-far" : "");
         cell.textContent = item.label;
-        cell.addEventListener("click", () => {
-          if (clickPhase === 0) {
-            pickStart = idx;
-            pickEnd = idx;
-            clickPhase = 1;
-          } else {
-            let s = Math.min(pickStart, idx);
-            let e = Math.max(pickStart, idx);
-            if (e - s + 1 > MAX) {
-              if (idx > pickStart) e = s + MAX - 1;
-              else s = e - MAX + 1;
+        if (!tooFar) {
+          cell.addEventListener("click", () => {
+            if (clickPhase === 0) {
+              pickStart = idx;
+              pickEnd = idx;
+              clickPhase = 1;
+            } else {
+              let s = Math.min(pickStart, idx);
+              let e = Math.max(pickStart, idx);
+              if (e - s + 1 > MAX) {
+                if (idx > pickStart) e = s + MAX - 1;
+                else s = e - MAX + 1;
+              }
+              pickStart = s;
+              pickEnd = e;
+              clickPhase = 0;
             }
-            pickStart = s;
-            pickEnd = e;
-            clickPhase = 0;
-          }
-          renderGrid();
-        });
+            renderGrid();
+          });
+        }
         grid.appendChild(cell);
       });
 
@@ -913,6 +967,25 @@ const OverviewPage = (() => {
     document.querySelector(".range-picker-popup")?.remove();
   }
 
+  function initSmtDefaultRange() {
+    const dates = Engine.getAvailableDates();
+    if (!dates.length) { searchFromDate = null; searchToDate = null; return; }
+    searchToDate = dates[dates.length - 1];
+    if (smtPeriod === "daily") {
+      searchFromDate = dates[Math.max(0, dates.length - 7)];
+    } else if (smtPeriod === "weekly") {
+      const weekMap = getWeekMap(dates);
+      const weeks = Object.keys(weekMap);
+      const startWk = weeks[Math.max(0, weeks.length - 7)];
+      searchFromDate = weekMap[startWk][0];
+    } else {
+      const monthMap = getMonthMap(dates);
+      const months = Object.keys(monthMap);
+      const startMo = months[Math.max(0, months.length - 7)];
+      searchFromDate = monthMap[startMo][0];
+    }
+  }
+
   // ══════════════════════════════════════
   // SECTION 3 LEFT: Search Material
   // ══════════════════════════════════════
@@ -939,25 +1012,64 @@ const OverviewPage = (() => {
             <span class="material-tags-placeholder">material yang dipilih</span>
           </div>
         </div>
-        <div class="search-right">
-          <div class="search-right-value-col">
-            <div class="search-right-col-label">value</div>
-            <div class="search-value-item">
-              <div class="search-value-box" id="srBrd"></div>
-              <span class="search-value-unit">BRD</span>
-            </div>
-            <div class="search-value-item">
-              <div class="search-value-box" id="srKg"></div>
-              <span class="search-value-unit">KG</span>
-            </div>
+        <div class="search-right" style="flex:1;min-width:0">
+          <div style="display:flex;justify-content:flex-end;min-height:24px" id="smtCombineWrap">
+            <button class="smt-mode-btn" id="smtCombineBtn" style="display:none">Breakdown Chart</button>
           </div>
-          <div class="search-right-yield-col">
-            <div class="search-right-col-label">yield</div>
-            <div class="donut-wrap" id="srDonut" style="display:none"></div>
-          </div>
+          <div id="smtChartsContainer"></div>
+          <div class="smt-chart-empty" id="smtChartEmpty">Pilih material untuk ditampilkan</div>
         </div>
       </div>
     `;
+
+    // Header controls: metric toggle + period dropdown + range nav
+    const hdrCtrl = document.getElementById("smtHeaderControls");
+    hdrCtrl.innerHTML = `
+      <div class="toggle-group" id="smtMetricToggle">
+        <button class="toggle-btn active" data-metric="brd">BRD</button>
+        <button class="toggle-btn" data-metric="kg">KG</button>
+        <button class="toggle-btn" data-metric="pct" id="smtPctBtn" style="display:none">%</button>
+      </div>
+      <div id="smtPeriodSelectWrap"></div>
+      <div class="date-nav" id="searchDateNav">
+        <button class="date-nav-btn" id="searchRangePrev">‹</button>
+        <button class="chart-range-btn" id="searchRangeBtn">${fmtSearchRange()}</button>
+        <button class="date-nav-btn" id="searchRangeNext">›</button>
+      </div>
+    `;
+
+    // Metric toggle
+    hdrCtrl.querySelectorAll("#smtMetricToggle .toggle-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        smtMetric = btn.dataset.metric;
+        hdrCtrl.querySelectorAll("#smtMetricToggle .toggle-btn").forEach(b => b.classList.toggle("active", b.dataset.metric === smtMetric));
+        renderSearchResult();
+      });
+    });
+
+    // Combine toggle
+    document.getElementById("smtCombineBtn").addEventListener("click", () => {
+      smtCombined = !smtCombined;
+      const btn = document.getElementById("smtCombineBtn");
+      btn.textContent = smtCombined ? "Breakdown Chart" : "Combine Chart";
+      renderSearchResult();
+    });
+
+    // Period dropdown
+    const smtPeriodSel = DatePicker.createCustomSelect(
+      [
+        { value: "daily", label: "Daily" },
+        { value: "weekly", label: "Weekly" },
+        { value: "monthly", label: "Monthly" },
+      ],
+      smtPeriod,
+      (val) => {
+        smtPeriod = val;
+        initSmtDefaultRange();
+        renderSearchResult();
+      },
+    );
+    document.getElementById("smtPeriodSelectWrap").appendChild(smtPeriodSel.el);
 
     // Search input
     const input = document.getElementById("matSearchInput");
@@ -967,10 +1079,9 @@ const OverviewPage = (() => {
     let _acQ = "";
 
     function renderAcList() {
-      const selSet = new Set(selectedMaterials.map((m) => m.idx));
-      const allChecked =
-        _acResults.length > 0 && _acResults.every((r) => selSet.has(r.idx));
-      const someChecked = _acResults.some((r) => selSet.has(r.idx));
+      const selSet = new Set(selectedMaterials.map(m => m.idx));
+      const allChecked = _acResults.length > 0 && _acResults.every(r => selSet.has(r.idx));
+      const someChecked = _acResults.some(r => selSet.has(r.idx));
       const re = new RegExp(
         `(${_acQ.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`,
         "gi",
@@ -978,77 +1089,75 @@ const OverviewPage = (() => {
 
       acList.innerHTML = `
         <div class="search-ac-select-all">
-          <div id="acSelectAll" style="display:flex;align-items:center;gap:8px;cursor:pointer">
-            <input type="checkbox" class="search-ac-checkbox" id="acSelectAllChk">
+          <div id="matAcSelectAll" style="display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="checkbox" class="search-ac-checkbox" id="matAcSelectAllChk">
             <span>Select All</span>
           </div>
-          <button class="search-ac-done-btn" id="acDoneBtn">Selesai</button>
+          <button class="search-ac-done-btn" id="matAcDoneBtn">Selesai</button>
         </div>
-        ${_acResults
-          .map((r) => {
-            const checked = selSet.has(r.idx);
-            const highlighted = r.matdesc.replace(re, "<mark>$1</mark>");
-            return `<div class="search-ac-item" data-idx="${r.idx}">
+        ${_acResults.map(r => {
+          const checked = selSet.has(r.idx);
+          const highlighted = r.matdesc.replace(re, "<mark>$1</mark>");
+          return `<div class="search-ac-item" data-idx="${r.idx}">
             <input type="checkbox" class="search-ac-checkbox" ${checked ? "checked" : ""} readonly>
             <span class="search-ac-desc">${highlighted}</span>
             <span class="search-ac-code">${r.matcode}</span>
           </div>`;
-          })
-          .join("")}
+        }).join("")}
       `;
 
-      const selectAllChk = document.getElementById("acSelectAllChk");
+      const selectAllChk = document.getElementById("matAcSelectAllChk");
       selectAllChk.checked = allChecked;
       selectAllChk.indeterminate = !allChecked && someChecked;
 
-      // Checkbox click — toggle selection
-      acList.querySelectorAll(".search-ac-item[data-idx]").forEach((item) => {
-        item.querySelector(".search-ac-checkbox").addEventListener("click", (e) => {
+      acList.querySelectorAll(".search-ac-item[data-idx]").forEach(item => {
+        item.querySelector(".search-ac-checkbox").addEventListener("click", e => {
           e.stopPropagation();
           const idx = parseInt(item.dataset.idx);
-          const r = _acResults.find((x) => x.idx === idx);
+          const r = _acResults.find(x => x.idx === idx);
           if (!r) return;
-          const i = selectedMaterials.findIndex((m) => m.idx === idx);
+          const i = selectedMaterials.findIndex(m => m.idx === idx);
           if (i >= 0) selectedMaterials.splice(i, 1);
           else selectedMaterials.push(r);
           renderAcList();
+          updateSearchFilterOptions();
           renderSearchResult();
         });
-        // Label click — select only this material
-        item.querySelector(".search-ac-desc").addEventListener("click", (e) => {
+        item.querySelector(".search-ac-desc").addEventListener("click", e => {
           e.stopPropagation();
           const idx = parseInt(item.dataset.idx);
-          const r = _acResults.find((x) => x.idx === idx);
+          const r = _acResults.find(x => x.idx === idx);
           if (!r) return;
           selectedMaterials.length = 0;
           selectedMaterials.push(r);
+          searchFilters = { dept: "All", pv: "All", mvt: "All" };
           acList.classList.remove("show");
           input.value = "";
+          updateSearchFilterOptions();
           renderSearchResult();
         });
       });
 
-      // Select All click — toggle all
-      document.getElementById("acSelectAll").addEventListener("click", (e) => {
+      document.getElementById("matAcSelectAll").addEventListener("click", e => {
         e.stopPropagation();
-        const selSet = new Set(selectedMaterials.map((m) => m.idx));
-        const allChk = _acResults.every((r) => selSet.has(r.idx));
+        const set = new Set(selectedMaterials.map(m => m.idx));
+        const allChk = _acResults.every(r => set.has(r.idx));
         if (allChk) {
-          _acResults.forEach((r) => {
-            const i = selectedMaterials.findIndex((m) => m.idx === r.idx);
+          _acResults.forEach(r => {
+            const i = selectedMaterials.findIndex(m => m.idx === r.idx);
             if (i >= 0) selectedMaterials.splice(i, 1);
           });
         } else {
-          _acResults.forEach((r) => {
-            if (!selSet.has(r.idx)) selectedMaterials.push(r);
+          _acResults.forEach(r => {
+            if (!set.has(r.idx)) selectedMaterials.push(r);
           });
         }
         renderAcList();
+        updateSearchFilterOptions();
         renderSearchResult();
       });
 
-      // Selesai — close dropdown
-      document.getElementById("acDoneBtn").addEventListener("click", (e) => {
+      document.getElementById("matAcDoneBtn").addEventListener("click", e => {
         e.stopPropagation();
         acList.classList.remove("show");
         input.value = "";
@@ -1057,22 +1166,15 @@ const OverviewPage = (() => {
 
     input.addEventListener("input", () => {
       const q = input.value.trim();
-      if (q.length < 2) {
-        acList.classList.remove("show");
-        return;
-      }
+      if (q.length < 2) { acList.classList.remove("show"); return; }
       const results = Engine.searchMaterial(q);
-      if (!results.length) {
-        acList.classList.remove("show");
-        return;
-      }
+      if (!results.length) { acList.classList.remove("show"); return; }
       _acResults = results;
       _acQ = q;
       renderAcList();
       acList.classList.add("show");
     });
 
-    // Close autocomplete on outside click
     document.addEventListener("click", (e) => {
       if (!e.target.closest(".search-material-wrap")) {
         acList.classList.remove("show");
@@ -1119,53 +1221,81 @@ const OverviewPage = (() => {
     window._matPvSel = pvSel;
     window._matMvtSel = mvtSel;
 
-    // Date range button with prev/next navigation
-    const searchNavContainer = document.getElementById("searchDateNav");
-    searchNavContainer.innerHTML = `
-      <div class="date-nav">
-        <button class="date-nav-btn" id="searchRangePrev">‹</button>
-        <button class="chart-range-btn" id="searchRangeBtn">${fmtSearchRange()}</button>
-        <button class="date-nav-btn" id="searchRangeNext">›</button>
-      </div>
-    `;
-    document
-      .getElementById("searchRangeBtn")
-      .addEventListener("click", openSearchRangePicker);
-    document.getElementById("searchRangePrev").addEventListener("click", () => {
-      const allDates = Engine.getAvailableDates();
+    // Range nav event listeners
+    document.getElementById("searchRangeBtn").addEventListener("click", openSearchRangePicker);
+    document.getElementById("searchRangePrev").addEventListener("click", () => stepSearchRange(-1));
+    document.getElementById("searchRangeNext").addEventListener("click", () => stepSearchRange(1));
+  }
+
+  function stepSearchRange(dir) {
+    const allDates = Engine.getAvailableDates();
+    if (!allDates.length) return;
+
+    if (smtPeriod === "weekly") {
+      const wMap = getWeekMap(allDates);
+      const weeks = Object.keys(wMap);
+      const fk = searchFromDate.slice(0, 4) + "-W" + KPI.getISOWeek(searchFromDate);
+      const tk = searchToDate.slice(0, 4) + "-W" + KPI.getISOWeek(searchToDate);
+      const fi = weeks.indexOf(fk), ti = weeks.indexOf(tk);
+      const span = ti - fi;
+      const ni = dir < 0 ? fi - 1 : ti + 1;
+      if (ni < 0 || ni >= weeks.length) return;
+      const nf = dir < 0 ? ni : Math.max(0, ni - span);
+      const nt = dir < 0 ? Math.min(weeks.length - 1, ni + span) : ni;
+      searchFromDate = wMap[weeks[nf]][0];
+      searchToDate = wMap[weeks[nt]].slice(-1)[0];
+    } else if (smtPeriod === "monthly") {
+      const mMap = getMonthMap(allDates);
+      const months = Object.keys(mMap);
+      const fk = searchFromDate.slice(0, 7), tk = searchToDate.slice(0, 7);
+      const fi = months.indexOf(fk), ti = months.indexOf(tk);
+      const span = ti - fi;
+      const ni = dir < 0 ? fi - 1 : ti + 1;
+      if (ni < 0 || ni >= months.length) return;
+      const nf = dir < 0 ? ni : Math.max(0, ni - span);
+      const nt = dir < 0 ? Math.min(months.length - 1, ni + span) : ni;
+      searchFromDate = mMap[months[nf]][0];
+      searchToDate = mMap[months[nt]].slice(-1)[0];
+    } else {
       const fromIdx = allDates.indexOf(searchFromDate);
-      if (fromIdx <= 0) return;
-      const span = allDates.indexOf(searchToDate) - fromIdx;
-      searchFromDate = allDates[fromIdx - 1];
-      searchToDate = allDates[Math.max(0, fromIdx - 1 + span)];
-      renderSearchResult();
-    });
-    document.getElementById("searchRangeNext").addEventListener("click", () => {
-      const allDates = Engine.getAvailableDates();
       const toIdx = allDates.indexOf(searchToDate);
-      if (toIdx >= allDates.length - 1) return;
-      const span = toIdx - allDates.indexOf(searchFromDate);
-      searchToDate = allDates[toIdx + 1];
-      searchFromDate = allDates[Math.max(0, toIdx + 1 - span)];
-      renderSearchResult();
-    });
+      const span = toIdx - fromIdx;
+      if (dir < 0) {
+        if (fromIdx <= 0) return;
+        searchFromDate = allDates[fromIdx - 1];
+        searchToDate = allDates[Math.max(0, fromIdx - 1 + span)];
+      } else {
+        if (toIdx >= allDates.length - 1) return;
+        searchToDate = allDates[toIdx + 1];
+        searchFromDate = allDates[Math.max(0, toIdx + 1 - span)];
+      }
+    }
+    renderSearchResult();
   }
 
   function fmtSearchRange() {
     if (!searchFromDate) return "—";
+    if (smtPeriod === "weekly") {
+      const fW = "W" + KPI.getISOWeek(searchFromDate);
+      const tW = "W" + KPI.getISOWeek(searchToDate);
+      if (fW === tW && searchFromDate.slice(0, 4) === searchToDate.slice(0, 4))
+        return fW + " " + searchFromDate.slice(0, 4);
+      return fW + " – " + tW + " " + searchToDate.slice(0, 4);
+    }
+    if (smtPeriod === "monthly") {
+      const fM = MONTH_NAMES[parseInt(searchFromDate.slice(5, 7))];
+      const tM = MONTH_NAMES[parseInt(searchToDate.slice(5, 7))];
+      if (searchFromDate.slice(0, 7) === searchToDate.slice(0, 7))
+        return fM + " " + searchFromDate.slice(0, 4);
+      return fM + " – " + tM + " " + searchToDate.slice(0, 4);
+    }
     const fmt = (d) => {
       const p = d.split("-");
       return p[2] + " " + MONTH_NAMES[parseInt(p[1])];
     };
     if (searchFromDate === searchToDate)
       return fmt(searchFromDate) + " " + searchFromDate.slice(0, 4);
-    return (
-      fmt(searchFromDate) +
-      " – " +
-      fmt(searchToDate) +
-      " " +
-      searchToDate.slice(0, 4)
-    );
+    return fmt(searchFromDate) + " – " + fmt(searchToDate) + " " + searchToDate.slice(0, 4);
   }
 
   function getSearchDates() {
@@ -1191,32 +1321,148 @@ const OverviewPage = (() => {
   }
 
   function openSearchRangePicker() {
-    const MAX = 31;
     const dates = Engine.getAvailableDates();
     if (!dates.length) return;
 
+    closeRangePicker();
+    closeSearchRangePicker();
+
+    if (smtPeriod === "daily") {
+      openSearchRangeDaily(dates);
+    } else {
+      openSearchRangeGrid(dates);
+    }
+  }
+
+  function openSearchRangeGrid(dates) {
+    let items = [];
+    if (smtPeriod === "weekly") {
+      items = Object.keys(getWeekMap(dates)).map(k => ({ key: k, label: "W" + k.split("-W")[1], fullLabel: "W" + k.split("-W")[1] + " " + k.split("-W")[0] }));
+    } else {
+      items = Object.keys(getMonthMap(dates)).map(k => ({ key: k, label: MONTH_NAMES[parseInt(k.slice(5, 7))], fullLabel: MONTH_NAMES[parseInt(k.slice(5, 7))] + " " + k.slice(0, 4) }));
+    }
+
+    const wMap = smtPeriod === "weekly" ? getWeekMap(dates) : null;
+    const mMap = smtPeriod === "monthly" ? getMonthMap(dates) : null;
+
+    function keyForDate(d) {
+      if (smtPeriod === "weekly") return d.slice(0, 4) + "-W" + KPI.getISOWeek(d);
+      return d.slice(0, 7);
+    }
+
+    let pickStart = Math.max(0, items.length - 7);
+    let pickEnd = items.length - 1;
+    if (searchFromDate && searchToDate) {
+      const fk = keyForDate(searchFromDate), tk = keyForDate(searchToDate);
+      const si = items.findIndex(i => i.key === fk);
+      const ei = items.findIndex(i => i.key === tk);
+      if (si !== -1 && ei !== -1) { pickStart = si; pickEnd = ei; }
+    }
+    let clickPhase = 0;
+
+    const popup = document.createElement("div");
+    popup.className = "range-picker-popup";
+    popup.addEventListener("click", e => e.stopPropagation());
+    popup.addEventListener("wheel", e => { e.preventDefault(); document.querySelector(".page-content")?.scrollBy({ top: e.deltaY }); }, { passive: false });
+
+    function renderGrid() {
+      const hint = clickPhase === 0 ? "Pilih awal rentang" : "Pilih akhir rentang";
+      const fromLabel = items[pickStart] ? items[pickStart].fullLabel : "—";
+      const toLabel = clickPhase === 0 && items[pickEnd] ? items[pickEnd].fullLabel : "—";
+      popup.innerHTML = `
+        <div class="range-picker-header">
+          <span class="range-picker-title">${hint}</span>
+          <button class="range-picker-close" id="srpClose">×</button>
+        </div>
+        <div class="range-daily-summary">
+          <div class="range-daily-summary-field ${clickPhase === 0 ? "is-active" : ""}">
+            <div class="range-daily-summary-label">Dari</div>
+            <div class="range-daily-summary-val">${fromLabel}</div>
+          </div>
+          <div class="range-daily-summary-arrow">→</div>
+          <div class="range-daily-summary-field ${clickPhase === 1 ? "is-active" : ""}">
+            <div class="range-daily-summary-label">Sampai</div>
+            <div class="range-daily-summary-val">${toLabel}</div>
+          </div>
+        </div>
+        <div class="range-picker-grid" id="srpGrid"></div>
+        <div class="range-picker-footer">
+          <button class="range-picker-reset" id="srpReset">Reset</button>
+          <button class="range-picker-apply" id="srpApply" ${clickPhase === 1 ? "disabled" : ""}>Terapkan</button>
+        </div>
+      `;
+
+      const grid = popup.querySelector("#srpGrid");
+      items.forEach((item, idx) => {
+        const inRange = idx >= pickStart && idx <= pickEnd;
+        const isEndpoint = idx === pickStart || (clickPhase === 0 && idx === pickEnd);
+        const cell = document.createElement("div");
+        cell.className = "range-picker-cell" + (inRange ? " in-range" : "") + (isEndpoint ? " is-start" : "");
+        cell.textContent = item.label;
+        cell.addEventListener("click", () => {
+          if (clickPhase === 0) {
+            pickStart = idx; pickEnd = idx; clickPhase = 1;
+          } else {
+            pickStart = Math.min(pickStart, idx);
+            pickEnd = Math.max(pickStart, idx);
+            clickPhase = 0;
+          }
+          renderGrid();
+        });
+        grid.appendChild(cell);
+      });
+
+      popup.querySelector("#srpClose").addEventListener("click", closeSearchRangePicker);
+      popup.querySelector("#srpReset").addEventListener("click", () => {
+        initSmtDefaultRange();
+        closeSearchRangePicker();
+        renderSearchResult();
+      });
+      popup.querySelector("#srpApply").addEventListener("click", () => {
+        const selKeys = items.slice(pickStart, pickEnd + 1).map(i => i.key);
+        const map = smtPeriod === "weekly" ? wMap : mMap;
+        const allDates = selKeys.flatMap(k => map[k] || []);
+        if (allDates.length) {
+          searchFromDate = allDates[0];
+          searchToDate = allDates[allDates.length - 1];
+        }
+        closeSearchRangePicker();
+        renderSearchResult();
+      });
+    }
+
+    renderGrid();
+    document.body.appendChild(popup);
+
+    function positionPopup() {
+      const btn = document.getElementById("searchRangeBtn");
+      if (!btn) return;
+      const rect = btn.getBoundingClientRect();
+      popup.style.top = rect.bottom + 6 + "px";
+      popup.style.left = Math.max(8, Math.min(rect.left, window.innerWidth - 300 - 32)) + "px";
+    }
+    positionPopup();
+    _srScrollListener = positionPopup;
+    const sc = document.querySelector(".page-content");
+    if (sc) sc.addEventListener("scroll", _srScrollListener);
+    popup.addEventListener("scroll", _srScrollListener, true);
+    _srDocListener = () => closeSearchRangePicker();
+    setTimeout(() => document.addEventListener("click", _srDocListener), 0);
+  }
+
+  function openSearchRangeDaily(dates) {
     const availSet = new Set(dates);
-    const allMonths = [...new Set(dates.map((d) => d.slice(0, 7)))];
+    const allMonths = [...new Set(dates.map(d => d.slice(0, 7)))];
 
     let fromDate = searchFromDate || dates[dates.length - 1];
     let toDate = searchToDate || dates[dates.length - 1];
     let clickPhase = 0;
     let srCalMonth = fromDate.slice(0, 7);
 
-    closeRangePicker();
-    closeSearchRangePicker();
-
     const popup = document.createElement("div");
     popup.className = "range-picker-popup range-picker-daily";
-    popup.addEventListener("click", (e) => e.stopPropagation());
-    popup.addEventListener(
-      "wheel",
-      (e) => {
-        e.preventDefault();
-        document.querySelector(".page-content")?.scrollBy({ top: e.deltaY });
-      },
-      { passive: false },
-    );
+    popup.addEventListener("click", e => e.stopPropagation());
+    popup.addEventListener("wheel", e => { e.preventDefault(); document.querySelector(".page-content")?.scrollBy({ top: e.deltaY }); }, { passive: false });
 
     function fmtD(d) {
       if (!d) return "—";
@@ -1225,11 +1471,10 @@ const OverviewPage = (() => {
     }
 
     function renderPopup() {
-      const hint =
-        clickPhase === 0 ? "Pilih tanggal mulai" : "Pilih tanggal akhir";
+      const hint = clickPhase === 0 ? "Pilih tanggal mulai" : "Pilih tanggal akhir";
       popup.innerHTML = `
         <div class="range-picker-header">
-          <span class="range-picker-title">${hint} <span class="range-picker-hint">(maks ${MAX} hari)</span></span>
+          <span class="range-picker-title">${hint}</span>
           <button class="range-picker-close" id="srpClose">×</button>
         </div>
         <div class="range-daily-summary">
@@ -1250,13 +1495,9 @@ const OverviewPage = (() => {
         </div>
       `;
 
-      popup
-        .querySelector("#srpClose")
-        .addEventListener("click", closeSearchRangePicker);
+      popup.querySelector("#srpClose").addEventListener("click", closeSearchRangePicker);
       popup.querySelector("#srpReset").addEventListener("click", () => {
-        const last = Engine.getLastDate();
-        searchFromDate = last;
-        searchToDate = last;
+        initSmtDefaultRange();
         closeSearchRangePicker();
         renderSearchResult();
       });
@@ -1278,14 +1519,8 @@ const OverviewPage = (() => {
       const [yr, mo] = srCalMonth.split("-").map(Number);
       const minMonth = allMonths[0];
       const maxMonth = allMonths[allMonths.length - 1];
-      const from =
-        fromDate && toDate
-          ? fromDate <= toDate
-            ? fromDate
-            : toDate
-          : fromDate;
-      const to =
-        fromDate && toDate ? (fromDate <= toDate ? toDate : fromDate) : null;
+      const from = fromDate && toDate ? (fromDate <= toDate ? fromDate : toDate) : fromDate;
+      const to = fromDate && toDate ? (fromDate <= toDate ? toDate : fromDate) : null;
 
       panel.innerHTML = `
         <div class="range-cal-nav">
@@ -1299,24 +1534,18 @@ const OverviewPage = (() => {
       panel.querySelector("#srpCalPrev").addEventListener("click", () => {
         const [y, m] = srCalMonth.split("-").map(Number);
         const prev = new Date(y, m - 2, 1);
-        srCalMonth =
-          prev.getFullYear() +
-          "-" +
-          String(prev.getMonth() + 1).padStart(2, "0");
+        srCalMonth = prev.getFullYear() + "-" + String(prev.getMonth() + 1).padStart(2, "0");
         renderSrCalPanel(panel);
       });
       panel.querySelector("#srpCalNext").addEventListener("click", () => {
         const [y, m] = srCalMonth.split("-").map(Number);
         const next = new Date(y, m, 1);
-        srCalMonth =
-          next.getFullYear() +
-          "-" +
-          String(next.getMonth() + 1).padStart(2, "0");
+        srCalMonth = next.getFullYear() + "-" + String(next.getMonth() + 1).padStart(2, "0");
         renderSrCalPanel(panel);
       });
 
       const grid = panel.querySelector("#srpCalGrid");
-      ["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"].forEach((d) => {
+      ["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"].forEach(d => {
         const el = document.createElement("div");
         el.className = "range-cal-dow";
         el.textContent = d;
@@ -1327,11 +1556,7 @@ const OverviewPage = (() => {
       let startDow = firstDay.getDay();
       startDow = startDow === 0 ? 6 : startDow - 1;
       for (let i = 0; i < startDow; i++) {
-        grid.appendChild(
-          Object.assign(document.createElement("div"), {
-            className: "range-cal-cell",
-          }),
-        );
+        grid.appendChild(Object.assign(document.createElement("div"), { className: "range-cal-cell" }));
       }
 
       const daysInMonth = new Date(yr, mo, 0).getDate();
@@ -1341,38 +1566,14 @@ const OverviewPage = (() => {
         const inRange = from && to && dateStr >= from && dateStr <= to;
         const isEndpoint = dateStr === fromDate || dateStr === toDate;
 
-        let tooFar = false;
-        if (available && clickPhase === 1 && fromDate) {
-          const diff = Math.round(
-            (new Date(dateStr) - new Date(fromDate)) / 86400000,
-          );
-          if (Math.abs(diff) >= MAX) tooFar = true;
-        }
-
         const cell = document.createElement("div");
-        cell.className =
-          "range-cal-cell" +
-          (available && !tooFar ? " available" : "") +
-          (inRange ? " in-range" : "") +
-          (isEndpoint ? " is-endpoint" : "") +
-          (tooFar && available ? " too-far" : "");
+        cell.className = "range-cal-cell" + (available ? " available" : "") + (inRange ? " in-range" : "") + (isEndpoint ? " is-endpoint" : "");
         cell.innerHTML = `<span>${d}</span>`;
 
-        if (available && !tooFar) {
+        if (available) {
           cell.addEventListener("click", () => {
-            if (clickPhase === 0) {
-              fromDate = dateStr;
-              toDate = null;
-              clickPhase = 1;
-            } else {
-              toDate = dateStr;
-              if (toDate < fromDate) {
-                const tmp = fromDate;
-                fromDate = toDate;
-                toDate = tmp;
-              }
-              clickPhase = 0;
-            }
+            if (clickPhase === 0) { fromDate = dateStr; toDate = null; clickPhase = 1; }
+            else { toDate = dateStr; if (toDate < fromDate) { const tmp = fromDate; fromDate = toDate; toDate = tmp; } clickPhase = 0; }
             renderPopup();
           });
         }
@@ -1388,22 +1589,20 @@ const OverviewPage = (() => {
       if (!btn) return;
       const rect = btn.getBoundingClientRect();
       popup.style.top = rect.bottom + 6 + "px";
-      popup.style.left =
-        Math.max(8, Math.min(rect.left, window.innerWidth - 270 - 32)) + "px";
+      popup.style.left = Math.max(8, Math.min(rect.left, window.innerWidth - 270 - 32)) + "px";
     }
     positionPopup();
     _srScrollListener = positionPopup;
     const sc = document.querySelector(".page-content");
     if (sc) sc.addEventListener("scroll", _srScrollListener);
     popup.addEventListener("scroll", _srScrollListener, true);
-
     _srDocListener = () => closeSearchRangePicker();
     setTimeout(() => document.addEventListener("click", _srDocListener), 0);
   }
 
   function updateSearchFilterOptions() {
     if (!selectedMaterials.length) return;
-    const indices = selectedMaterials.map((m) => m.idx);
+    const indices = selectedMaterials.map(m => m.idx);
     const opts = Engine.getMaterialFilterOptionsRange(
       indices,
       getSearchDates(),
@@ -1433,11 +1632,101 @@ const OverviewPage = (() => {
     );
   }
 
+  function _smtPrecompute(matIndices, dates, filters) {
+    const matSet = new Set(matIndices);
+    const lookups = Engine.getLookups();
+    const matchingMats = new Set();
+    const matDate = new Map();
+    const bahanDate = new Map();
+
+    const rows = Engine.getRowsForDates(dates);
+    rows.forEach(r => {
+      const dept = lookups.dept[r[0]], pv = lookups.pv[r[1]],
+            mvt = lookups.mvt[r[5]], sloc = lookups.sloc[r[9]];
+
+      if (mvt === "BAHAN" && (filters.dept === "All" || dept === filters.dept)) {
+        const pvF = filters.pv;
+        let ok = false;
+        if (pvF === "All" || pvF === "AYAM BARU") { if (pv === "AYAM BARU" && sloc === "STAGING RM") ok = true; }
+        if (pvF === "All" || pvF === "AYAM LAMA") { if (pv === "AYAM LAMA" && (sloc === "CRP" || sloc === "REPRO")) ok = true; }
+        if (pvF === "All" || pvF === "AYAM PROSES") { if (pv === "AYAM PROSES") ok = true; }
+        if (ok) bahanDate.set(r[8], (bahanDate.get(r[8]) || 0) + r[7]);
+      }
+
+      if (!matSet.has(r[4])) return;
+      if (filters.dept !== "All" && dept !== filters.dept) return;
+      if (filters.pv !== "All" && pv !== filters.pv) return;
+      if (filters.mvt !== "All" && mvt !== filters.mvt) return;
+
+      matchingMats.add(r[4]);
+      const key = r[4] + "|" + r[8];
+      const cur = matDate.get(key);
+      if (cur) { cur.brd += r[6]; cur.kg += r[7]; }
+      else matDate.set(key, { brd: r[6], kg: r[7] });
+    });
+
+    return { matchingMats, matDate, bahanDate };
+  }
+
+  function _smtMatVal(pre, matIdx, periodDates, metric) {
+    let total = 0;
+    for (const d of periodDates) {
+      const v = pre.matDate.get(matIdx + "|" + d);
+      if (v) total += metric === "brd" ? v.brd : v.kg;
+    }
+    return total;
+  }
+
+  function _smtBahan(pre, periodDates) {
+    let total = 0;
+    for (const d of periodDates) total += pre.bahanDate.get(d) || 0;
+    return total;
+  }
+
+  function getSmtPeriodColumns(dates) {
+    if (smtPeriod === "daily") {
+      let prevMo = null;
+      return dates.map(d => {
+        const p = d.split("-");
+        const mo = parseInt(p[1]);
+        const label = mo !== prevMo ? MONTH_NAMES[mo] : "";
+        prevMo = mo;
+        return { key: d, label, fullLabel: p[2] + " " + MONTH_NAMES[mo], dates: [d] };
+      });
+    } else if (smtPeriod === "weekly") {
+      const weekMap = getWeekMap(dates);
+      return Object.keys(weekMap).map(wk => ({
+        key: wk,
+        label: "W" + wk.split("-W")[1],
+        fullLabel: "W" + wk.split("-W")[1] + " " + wk.split("-W")[0],
+        dates: weekMap[wk],
+      }));
+    } else {
+      const monthMap = getMonthMap(dates);
+      return Object.keys(monthMap).map(ym => ({
+        key: ym,
+        label: MONTH_NAMES[parseInt(ym.slice(5, 7))],
+        fullLabel: MONTH_NAMES[parseInt(ym.slice(5, 7))] + " " + ym.slice(0, 4),
+        dates: monthMap[ym],
+      }));
+    }
+  }
+
+  function smtGetCSSVar(name) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  }
+
+  const SMT_COLORS = ["#4d9eff", "#34d399", "#fbbf24", "#f472b6", "#a78bfa", "#fb923c", "#38bdf8", "#e879f9", "#f87171", "#2dd4bf"];
+
+  function destroySmtCharts() {
+    smtChartInstances.forEach(c => c.destroy());
+    smtChartInstances = [];
+  }
+
   function renderSearchResult() {
     const tagsEl = document.getElementById("matTags");
-    const brdEl = document.getElementById("srBrd");
-    const kgEl = document.getElementById("srKg");
-    const donutEl = document.getElementById("srDonut");
+    const chartsContainer = document.getElementById("smtChartsContainer");
+    const chartEmpty = document.getElementById("smtChartEmpty");
 
     // Sync range button label and prev/next state
     const rangeBtn = document.getElementById("searchRangeBtn");
@@ -1445,49 +1734,70 @@ const OverviewPage = (() => {
     const allDates = Engine.getAvailableDates();
     const fromIdx = allDates.indexOf(searchFromDate);
     const toIdx = allDates.indexOf(searchToDate);
-    const prevBtn = document.getElementById("searchRangePrev");
-    const nextBtn = document.getElementById("searchRangeNext");
-    if (prevBtn) prevBtn.disabled = fromIdx <= 0;
-    if (nextBtn) nextBtn.disabled = toIdx >= allDates.length - 1;
+    const prevBtnEl = document.getElementById("searchRangePrev");
+    const nextBtnEl = document.getElementById("searchRangeNext");
+    if (prevBtnEl) prevBtnEl.disabled = fromIdx <= 0;
+    if (nextBtnEl) nextBtnEl.disabled = toIdx >= allDates.length - 1;
+
+    // Update % toggle visibility
+    const pctBtn = document.getElementById("smtPctBtn");
+    if (pctBtn) {
+      if (searchFilters.mvt === "HASIL") {
+        pctBtn.style.display = "";
+      } else {
+        pctBtn.style.display = "none";
+        if (smtMetric === "pct") {
+          smtMetric = "brd";
+          document.querySelectorAll("#smtMetricToggle .toggle-btn").forEach(b => b.classList.toggle("active", b.dataset.metric === "brd"));
+        }
+      }
+    }
+
+    // Show combine/breakdown button only when 2+ materials selected and MVT is set
+    const combineBtn = document.getElementById("smtCombineBtn");
+    if (combineBtn) {
+      const showCombine = selectedMaterials.length >= 2 && searchFilters.mvt !== "All";
+      combineBtn.style.display = showCombine ? "" : "none";
+      combineBtn.textContent = smtCombined ? "Breakdown Chart" : "Combine Chart";
+      if (!showCombine) smtCombined = true;
+    }
 
     if (!selectedMaterials.length) {
-      tagsEl.innerHTML =
-        '<span class="material-tags-placeholder">Daftar Material Dipilih (bisa multiple)</span>';
-      brdEl.textContent = "";
-      kgEl.textContent = "";
-      donutEl.style.display = "none";
+      tagsEl.innerHTML = '<span class="material-tags-placeholder">Pilih material untuk ditampilkan</span>';
+      destroySmtCharts();
+      chartsContainer.innerHTML = "";
+      chartEmpty.style.display = "";
+      chartEmpty.textContent = "Pilih material untuk ditampilkan";
       return;
     }
 
     const dates = getSearchDates();
-
-    // Update filter dropdowns
     updateSearchFilterOptions();
 
-    // Render tags (dimmed if not matching filter)
-    const hasDimmed = selectedMaterials.some(m => !Engine.materialMatchesFilterRange(m.idx, searchFilters, dates));
+    // Precompute to know which materials match current filters
+    const matIndices = selectedMaterials.map(m => m.idx);
+    const pre = _smtPrecompute(matIndices, dates, searchFilters);
+
+    // Render tags with dimming + clear buttons
+    const hasDimmed = selectedMaterials.some(m => !pre.matchingMats.has(m.idx));
     tagsEl.innerHTML =
-      selectedMaterials
-        .map((m, i) => {
-          const matches = Engine.materialMatchesFilterRange(
-            m.idx,
-            searchFilters,
-            dates,
-          );
-          return `<span class="material-tag ${matches ? "" : "dimmed"}" data-i="${i}">
-        ${m.matdesc}
-        <span class="material-tag-remove" data-i="${i}">×</span>
-      </span>`;
-        })
-        .join("") +
+      selectedMaterials.map((mat, i) => {
+        const matches = pre.matchingMats.has(mat.idx);
+        const color = SMT_COLORS[i % SMT_COLORS.length];
+        return `<span class="material-tag ${matches ? "" : "dimmed"}" data-i="${i}">
+          <span style="background:${color};width:8px;height:8px;display:inline-block;border-radius:50%;margin-right:4px;flex-shrink:0"></span>
+          ${mat.matdesc}
+          <span class="material-tag-remove" data-i="${i}">×</span>
+        </span>`;
+      }).join("") +
       (hasDimmed ? `<button class="material-tags-clear-dimmed" id="matClearDimmed">Clear Unmatched</button>` : "") +
       `<button class="material-tags-clear-all" id="matClearAll">Clear All</button>`;
 
-    tagsEl.querySelectorAll(".material-tag-remove").forEach((btn) => {
+    tagsEl.querySelectorAll(".material-tag-remove").forEach(btn => {
       btn.addEventListener("click", (e) => {
         e.stopPropagation();
-        const idx = parseInt(btn.dataset.i);
-        selectedMaterials.splice(idx, 1);
+        const i = parseInt(btn.dataset.i);
+        selectedMaterials.splice(i, 1);
         if (selectedMaterials.length) {
           const indices = selectedMaterials.map(m => m.idx);
           const d = getSearchDates();
@@ -1508,13 +1818,14 @@ const OverviewPage = (() => {
         } else {
           searchFilters = { dept: "All", pv: "All", mvt: "All" };
         }
+        updateSearchFilterOptions();
         renderSearchResult();
       });
     });
 
     const clearDimmedBtn = document.getElementById("matClearDimmed");
     if (clearDimmedBtn) {
-      clearDimmedBtn.addEventListener("click", (e) => {
+      clearDimmedBtn.addEventListener("click", e => {
         e.stopPropagation();
         const d = getSearchDates();
         for (let i = selectedMaterials.length - 1; i >= 0; i--) {
@@ -1522,30 +1833,338 @@ const OverviewPage = (() => {
             selectedMaterials.splice(i, 1);
           }
         }
+        updateSearchFilterOptions();
         renderSearchResult();
       });
     }
 
-    document.getElementById("matClearAll").addEventListener("click", (e) => {
+    document.getElementById("matClearAll").addEventListener("click", e => {
       e.stopPropagation();
       selectedMaterials.length = 0;
       searchFilters = { dept: "All", pv: "All", mvt: "All" };
+      updateSearchFilterOptions();
       renderSearchResult();
     });
 
-    // Calculate result
-    const indices = selectedMaterials.map((m) => m.idx);
-    const result = Engine.calcMaterialValueRange(indices, searchFilters, dates);
-
-    brdEl.textContent = KPI.fmtShort(result.brd);
-    kgEl.textContent = KPI.fmtShort(result.kg);
-
-    if (searchFilters.mvt === "HASIL" && result.yieldPct !== null) {
-      donutEl.style.display = "";
-      Charts.renderDonut("srDonut", result.yieldPct);
-    } else {
-      donutEl.style.display = "none";
+    // Chart only renders when MVT is filled
+    if (searchFilters.mvt === "All") {
+      destroySmtCharts();
+      chartsContainer.innerHTML = "";
+      chartEmpty.style.display = "";
+      chartEmpty.textContent = "Pilih MVT untuk menampilkan chart";
+      return;
     }
+
+    // Build chart data
+    const columns = getSmtPeriodColumns(dates);
+    if (!columns.length) {
+      destroySmtCharts();
+      chartsContainer.innerHTML = "";
+      chartEmpty.style.display = "";
+      chartEmpty.textContent = "Tidak ada data untuk range ini";
+      return;
+    }
+
+    // Only chart materials that match current filters
+    const matchedMaterials = selectedMaterials.filter(m => pre.matchingMats.has(m.idx));
+    if (!matchedMaterials.length) {
+      destroySmtCharts();
+      chartsContainer.innerHTML = "";
+      chartEmpty.style.display = "";
+      chartEmpty.textContent = "Tidak ada material yang cocok dengan filter";
+      return;
+    }
+
+    chartEmpty.style.display = "none";
+    destroySmtCharts();
+
+    const xLabels = columns.map(c => c.label);
+    const fullLabels = columns.map(c => c.fullLabel || c.label);
+
+    function fmtTickVal(v) {
+      if (smtMetric === "pct") return v.toFixed(1) + "%";
+      return v >= 1000 ? (v / 1000).toFixed(1) + "k" : v.toLocaleString("id-ID", { maximumFractionDigits: 1 });
+    }
+
+    if (smtCombined) {
+      renderCombinedChart(chartsContainer, matchedMaterials, columns, xLabels, fullLabels, pre, fmtTickVal);
+    } else {
+      renderIndependentCharts(chartsContainer, matchedMaterials, columns, xLabels, fullLabels, pre, fmtTickVal);
+    }
+  }
+
+  function renderCombinedChart(container, mats, columns, xLabels, fullLabels, pre, fmtTickVal) {
+    const LINE_COLOR = "#4d9eff";
+    const totalValues = columns.map((col, ci) => {
+      let sum = 0;
+      mats.forEach(mat => {
+        if (smtMetric === "pct") {
+          const matKg = _smtMatVal(pre, mat.idx, col.dates, "kg");
+          const bahanKg = _smtBahan(pre, col.dates);
+          sum += bahanKg > 0 ? (matKg / bahanKg) * 100 : 0;
+        } else {
+          sum += _smtMatVal(pre, mat.idx, col.dates, smtMetric);
+        }
+      });
+      return sum;
+    });
+
+    const mn = Math.min(0, ...totalValues);
+    const mx = Math.max(...totalValues);
+    const pad = (mx - mn) * 0.1 || 1;
+
+    container.innerHTML = `
+      <div class="smt-chart-block">
+        <div class="smt-chart-legend">
+          <div class="smt-legend-date" id="smtCombDate"></div>
+          <div class="smt-legend-item" style="font-weight:600">
+            <span class="smt-legend-dot" style="background:${LINE_COLOR}"></span>
+            <span class="smt-legend-name" style="max-width:none">Total (${mats.length} material)</span>
+            <span class="smt-legend-val" id="smtCombValTotal" style="color:${LINE_COLOR}">—</span>
+          </div>
+        </div>
+        <div class="smt-chart-wrap" style="display:block;height:240px">
+          <canvas id="smtCombCanvas"></canvas>
+        </div>
+      </div>`;
+
+    let hoverIdx = columns.length - 1;
+
+    const crosshairPlugin = {
+      id: "smtCrosshair",
+      afterDatasetsDraw(chart) {
+        const ca = chart.chartArea; if (!ca) return;
+        const meta = chart.getDatasetMeta(0);
+        const si = Math.max(0, Math.min(meta.data.length - 1, hoverIdx));
+        const pt = meta.data[si]; if (!pt) return;
+        const ctx = chart.ctx;
+
+        ctx.save();
+        ctx.strokeStyle = "rgba(0,0,0,0.15)"; ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
+        ctx.beginPath(); ctx.moveTo(pt.x, ca.top); ctx.lineTo(pt.x, ca.bottom); ctx.stroke();
+        ctx.setLineDash([]);
+
+        ctx.beginPath(); ctx.arc(pt.x, pt.y, 3.5, 0, Math.PI * 2);
+        ctx.fillStyle = LINE_COLOR; ctx.fill(); ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.5; ctx.stroke();
+        ctx.restore();
+
+        const tel = document.getElementById("smtCombValTotal");
+        if (tel) tel.textContent = smtMetric === "pct" ? totalValues[si].toFixed(2) + "%" : totalValues[si].toLocaleString("id-ID", { maximumFractionDigits: 2 });
+        const dateEl = document.getElementById("smtCombDate");
+        if (dateEl) dateEl.textContent = fullLabels[si] || "";
+      }
+    };
+
+    const chartCanvas = document.getElementById("smtCombCanvas");
+    const chartInst = new Chart(chartCanvas.getContext("2d"), {
+      type: "line",
+      data: {
+        labels: xLabels,
+        datasets: [{
+          data: totalValues,
+          borderColor: LINE_COLOR,
+          borderWidth: 1.5,
+          backgroundColor: LINE_COLOR + "15",
+          fill: true,
+          tension: 0.15,
+          pointRadius: 0,
+          pointHoverRadius: 0,
+        }],
+      },
+      plugins: [crosshairPlugin],
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 600, easing: "easeInOutQuart" },
+        events: [],
+        layout: { padding: { top: 10, bottom: 8, left: 4, right: 8 } },
+        plugins: { legend: { display: false }, tooltip: { enabled: false } },
+        scales: {
+          x: {
+            grid: { display: false },
+            border: { display: false },
+            ticks: {
+              color: smtGetCSSVar("--text-muted"),
+              font: { family: "JetBrains Mono", size: 9, weight: "600" },
+              maxRotation: 0, padding: 0, autoSkip: smtPeriod !== "daily",
+            },
+          },
+          y: {
+            min: mn - pad, max: mx + pad,
+            grid: { color: smtGetCSSVar("--border-light"), lineWidth: 0.5 },
+            border: { display: false },
+            ticks: {
+              color: smtGetCSSVar("--text-muted"),
+              font: { family: "JetBrains Mono", size: 9 },
+              callback: v => fmtTickVal(v), maxTicksLimit: 8,
+            },
+          },
+        },
+      },
+    });
+    smtChartInstances.push(chartInst);
+
+    function getIdx(mouseX) {
+      const ca = chartInst.chartArea; if (!ca) return 0;
+      if (columns.length <= 1) return 0;
+      return Math.max(0, Math.min(columns.length - 1, Math.round((mouseX - ca.left) / ((ca.right - ca.left) / (columns.length - 1)))));
+    }
+
+    const wrap = chartCanvas.parentElement;
+    let ready = false;
+    let raf = false;
+    setTimeout(() => { ready = true; chartInst.draw(); }, 620);
+    wrap.style.pointerEvents = "auto";
+    wrap.addEventListener("mousemove", e => {
+      if (!ready) return;
+      const mx = e.clientX - chartCanvas.getBoundingClientRect().left;
+      const ni = getIdx(mx);
+      if (ni !== hoverIdx) { hoverIdx = ni; if (!raf) { raf = true; requestAnimationFrame(() => { raf = false; chartInst.draw(); }); } }
+    }, { passive: true });
+    wrap.addEventListener("touchmove", e => {
+      if (!ready) return;
+      const mx = e.touches[0].clientX - chartCanvas.getBoundingClientRect().left;
+      const ni = getIdx(mx);
+      if (ni !== hoverIdx) { hoverIdx = ni; if (!raf) { raf = true; requestAnimationFrame(() => { raf = false; chartInst.draw(); }); } }
+    }, { passive: true });
+  }
+
+  function renderIndependentCharts(container, mats, columns, xLabels, fullLabels, pre, fmtTickVal) {
+    container.innerHTML = mats.map((mat, i) => {
+      const origIdx = selectedMaterials.indexOf(mat);
+      const color = SMT_COLORS[origIdx % SMT_COLORS.length];
+      return `<div class="smt-chart-block" data-mat-i="${i}">
+        <div class="smt-chart-legend">
+          <div class="smt-legend-date" id="smtLvDate${i}"></div>
+          <div class="smt-legend-item">
+            <span class="smt-legend-dot" style="background:${color}"></span>
+            <span class="smt-legend-name" style="max-width:none">${mat.matdesc}</span>
+            <span class="smt-legend-val" id="smtLvVal${i}" style="color:${color}">—</span>
+          </div>
+        </div>
+        <div class="smt-chart-wrap" style="display:block">
+          <canvas id="smtChartCanvas${i}"></canvas>
+        </div>
+      </div>`;
+    }).join("");
+
+    mats.forEach((mat, i) => {
+      const origIdx = selectedMaterials.indexOf(mat);
+      const color = SMT_COLORS[origIdx % SMT_COLORS.length];
+
+      const values = columns.map(col => {
+        if (smtMetric === "pct") {
+          const matKg = _smtMatVal(pre, mat.idx, col.dates, "kg");
+          const bahanKg = _smtBahan(pre, col.dates);
+          return bahanKg > 0 ? (matKg / bahanKg) * 100 : 0;
+        }
+        return _smtMatVal(pre, mat.idx, col.dates, smtMetric);
+      });
+
+      const mn = Math.min(0, ...values);
+      const mx = Math.max(...values);
+      const pad = (mx - mn) * 0.1 || 1;
+
+      let hoverIdx = columns.length - 1;
+
+      const crosshairPlugin = {
+        id: "smtCrosshair" + i,
+        afterDatasetsDraw(chart) {
+          const ca = chart.chartArea; if (!ca) return;
+          const meta = chart.getDatasetMeta(0);
+          const si = Math.max(0, Math.min(meta.data.length - 1, hoverIdx));
+          const pt = meta.data[si]; if (!pt) return;
+          const ctx = chart.ctx;
+
+          ctx.save();
+          ctx.strokeStyle = "rgba(0,0,0,0.15)"; ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
+          ctx.beginPath(); ctx.moveTo(pt.x, ca.top); ctx.lineTo(pt.x, ca.bottom); ctx.stroke();
+          ctx.setLineDash([]);
+
+          ctx.beginPath(); ctx.arc(pt.x, pt.y, 3.5, 0, Math.PI * 2);
+          ctx.fillStyle = color; ctx.fill(); ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.5; ctx.stroke();
+          ctx.restore();
+
+          const lvEl = document.getElementById("smtLvVal" + i);
+          if (lvEl) lvEl.textContent = smtMetric === "pct" ? values[si].toFixed(2) + "%" : values[si].toLocaleString("id-ID", { maximumFractionDigits: 2 });
+          const dateEl = document.getElementById("smtLvDate" + i);
+          if (dateEl) dateEl.textContent = fullLabels[si] || "";
+        }
+      };
+
+      const chartCanvas = document.getElementById("smtChartCanvas" + i);
+      const chartInst = new Chart(chartCanvas.getContext("2d"), {
+        type: "line",
+        data: {
+          labels: xLabels,
+          datasets: [{
+            data: values,
+            borderColor: color,
+            borderWidth: 1.5,
+            backgroundColor: color + "15",
+            fill: true,
+            tension: 0.15,
+            pointRadius: 0,
+            pointHoverRadius: 0,
+          }],
+        },
+        plugins: [crosshairPlugin],
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: { duration: 600, easing: "easeInOutQuart" },
+          events: [],
+          layout: { padding: { top: 10, bottom: 8, left: 4, right: 8 } },
+          plugins: { legend: { display: false }, tooltip: { enabled: false } },
+          scales: {
+            x: {
+              grid: { display: false },
+              border: { display: false },
+              ticks: {
+                color: smtGetCSSVar("--text-muted"),
+                font: { family: "JetBrains Mono", size: 9, weight: "600" },
+                maxRotation: 0, padding: 0, autoSkip: smtPeriod !== "daily",
+              },
+            },
+            y: {
+              min: mn - pad, max: mx + pad,
+              grid: { color: smtGetCSSVar("--border-light"), lineWidth: 0.5 },
+              border: { display: false },
+              ticks: {
+                color: smtGetCSSVar("--text-muted"),
+                font: { family: "JetBrains Mono", size: 9 },
+                callback: v => fmtTickVal(v), maxTicksLimit: 5,
+              },
+            },
+          },
+        },
+      });
+      smtChartInstances.push(chartInst);
+
+      function getIdx(mouseX) {
+        const ca = chartInst.chartArea; if (!ca) return 0;
+        if (columns.length <= 1) return 0;
+        return Math.max(0, Math.min(columns.length - 1, Math.round((mouseX - ca.left) / ((ca.right - ca.left) / (columns.length - 1)))));
+      }
+
+      const wrap = chartCanvas.parentElement;
+      let ready = false;
+      let raf = false;
+      setTimeout(() => { ready = true; chartInst.draw(); }, 620);
+      wrap.style.pointerEvents = "auto";
+      wrap.addEventListener("mousemove", e => {
+        if (!ready) return;
+        const mx = e.clientX - chartCanvas.getBoundingClientRect().left;
+        const ni = getIdx(mx);
+        if (ni !== hoverIdx) { hoverIdx = ni; if (!raf) { raf = true; requestAnimationFrame(() => { raf = false; chartInst.draw(); }); } }
+      }, { passive: true });
+      wrap.addEventListener("touchmove", e => {
+        if (!ready) return;
+        const mx = e.touches[0].clientX - chartCanvas.getBoundingClientRect().left;
+        const ni = getIdx(mx);
+        if (ni !== hoverIdx) { hoverIdx = ni; if (!raf) { raf = true; requestAnimationFrame(() => { raf = false; chartInst.draw(); }); } }
+      }, { passive: true });
+    });
   }
 
   // ══════════════════════════════════════

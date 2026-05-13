@@ -109,11 +109,30 @@ const DatePicker = (() => {
     const labelEl = wrap.querySelector('.custom-select-label');
     const dropdown = wrap.querySelector('.custom-select-dropdown');
 
+    function positionDropdown() {
+      const rect = trigger.getBoundingClientRect();
+      dropdown.style.position = 'fixed';
+      dropdown.style.left = rect.left + 'px';
+      dropdown.style.minWidth = rect.width + 'px';
+      const spaceBelow = window.innerHeight - rect.bottom - 8;
+      const dropH = dropdown.scrollHeight;
+      if (dropH > spaceBelow && rect.top > spaceBelow) {
+        dropdown.style.top = '';
+        dropdown.style.bottom = (window.innerHeight - rect.top + 4) + 'px';
+      } else {
+        dropdown.style.top = (rect.bottom + 4) + 'px';
+        dropdown.style.bottom = '';
+      }
+    }
+
     trigger.addEventListener('click', e => {
       e.stopPropagation();
       const isOpen = wrap.classList.contains('open');
       document.querySelectorAll('.custom-select.open').forEach(s => s.classList.remove('open'));
-      if (!isOpen) wrap.classList.add('open');
+      if (!isOpen) {
+        wrap.classList.add('open');
+        positionDropdown();
+      }
     });
 
     function attachOptionListeners() {

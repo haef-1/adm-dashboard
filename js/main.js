@@ -87,24 +87,34 @@ const App = (() => {
     _bgRunning = true;
     showBgLoader(months[0]);
 
-    let total = 0;
-    for (let i = 0; i < months.length; i++) {
-      const ym = months[i];
-      updateBgLoader(ym, i + 1, months.length);
+    let loaded = 0;
+    const allRows = [];
 
-      try {
-        const rows = await DB.loadMonth(ym);
-        Engine.appendRows(rows);
-        total += rows.length;
+    const results = await Promise.allSettled(
+      months.map(ym =>
+        DB.loadMonth(ym).then(rows => {
+          loaded++;
+          updateBgLoader(ym, loaded, months.length);
+          return { ym, rows };
+        })
+      )
+    );
+
+    for (const res of results) {
+      if (res.status === 'fulfilled' && res.value.rows.length) {
+        const { ym, rows } = res.value;
+        for (let i = 0; i < rows.length; i++) allRows.push(rows[i]);
         console.log('[BG] Loaded ' + ym + ': ' + rows.length + ' rows');
-      } catch (e) {
-        console.warn('[BG] Error loading ' + ym, e);
+      } else if (res.status === 'rejected') {
+        console.warn('[BG] Error loading month', res.reason);
       }
     }
 
+    if (allRows.length) Engine.appendRows(allRows);
+
     _bgRunning = false;
     hideBgLoader();
-    console.log('[BG] Background load complete. Total appended: ' + total + ' rows');
+    console.log('[BG] Background load complete. Total appended: ' + allRows.length + ' rows');
 
     const hash = location.hash.slice(1) || 'overview';
     Navbar.navigateTo(hash);

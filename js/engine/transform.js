@@ -22,6 +22,7 @@ const Engine = (() => {
   let _yieldByDate = {};
   let _susutByDate = {};
   let _bahanDistByDate = {};
+  let _rowsByDate = new Map();
 
   // ── Livebird S/M/L mapping (mat code → category) ──
   const LB_SIZE_MAP = {
@@ -87,6 +88,7 @@ const Engine = (() => {
     _yieldByDate = {};
     _susutByDate = {};
     _bahanDistByDate = {};
+    _rowsByDate = new Map();
 
     const dateSet = new Set();
     const karkasByDate = {};
@@ -100,6 +102,10 @@ const Engine = (() => {
             sloc = R_SLOC[r[9]], matdesc = R_MATDESC[r[4]], date = r[8];
 
       dateSet.add(date);
+
+      let bucket = _rowsByDate.get(date);
+      if (!bucket) { bucket = []; _rowsByDate.set(date, bucket); }
+      bucket.push(r);
 
       // YIELD_DATA source: KARKAS + AYAM BARU
       if (dept === 'KARKAS' && pv === 'AYAM BARU' &&
@@ -210,30 +216,25 @@ const Engine = (() => {
 
   // ── Truck count for a specific date ──
   function getTruckForDate(dateStr) {
-    const orders = new Set();
+    const lbOrders = new Set();
+    const allOrders = new Set();
     const sizeCount = { Small: 0, Medium: 0, Large: 0 };
+    const dateRows = _rowsByDate.get(dateStr) || [];
 
-    RAW_DB.forEach(r => {
+    dateRows.forEach(r => {
       if (R_DEPT[r[0]] !== 'KARKAS' || R_PV[r[1]] !== 'AYAM BARU') return;
-      if (r[8] !== dateStr) return;
+      allOrders.add(R_ORDER[r[2]]);
+
       if (R_MVT[r[5]] !== 'BAHAN' || R_SLOC[r[9]] !== 'LIVEBIRD') return;
       if (!R_MATDESC[r[4]].includes('AYAM HIDUP')) return;
 
       const order = R_ORDER[r[2]];
-      if (orders.has(order)) return;
-      orders.add(order);
+      if (lbOrders.has(order)) return;
+      lbOrders.add(order);
 
       const matCode = R_MAT[r[3]];
       const size = LB_SIZE_MAP[matCode] || 'Unknown';
       if (sizeCount[size] !== undefined) sizeCount[size]++;
-    });
-
-    // Also count total unique orders (broader: all KARKAS AYAM BARU)
-    const allOrders = new Set();
-    RAW_DB.forEach(r => {
-      if (R_DEPT[r[0]] !== 'KARKAS' || R_PV[r[1]] !== 'AYAM BARU') return;
-      if (r[8] !== dateStr) return;
-      allOrders.add(R_ORDER[r[2]]);
     });
 
     return {
@@ -263,12 +264,16 @@ const Engine = (() => {
   // ── Truck count per day for calendar month ──
   function getTruckCalendar(ym) {
     const days = {};
-    RAW_DB.forEach(r => {
-      if (R_DEPT[r[0]] !== 'KARKAS' || R_PV[r[1]] !== 'AYAM BARU') return;
-      if (!r[8].startsWith(ym)) return;
-      if (!days[r[8]]) days[r[8]] = new Set();
-      days[r[8]].add(R_ORDER[r[2]]);
-    });
+    for (const dateStr of _allDates) {
+      if (!dateStr.startsWith(ym)) continue;
+      const dateRows = _rowsByDate.get(dateStr);
+      if (!dateRows) continue;
+      for (const r of dateRows) {
+        if (R_DEPT[r[0]] !== 'KARKAS' || R_PV[r[1]] !== 'AYAM BARU') continue;
+        if (!days[dateStr]) days[dateStr] = new Set();
+        days[dateStr].add(R_ORDER[r[2]]);
+      }
+    }
     const result = {};
     let total = 0;
     Object.keys(days).sort().forEach(d => {
@@ -306,10 +311,10 @@ const Engine = (() => {
   function getByProductForDate(dateStr) {
     const items = {};
     let totalBahan = 0;
+    const dateRows = _rowsByDate.get(dateStr) || [];
 
-    RAW_DB.forEach(r => {
+    dateRows.forEach(r => {
       if (R_DEPT[r[0]] !== 'KARKAS' || R_PV[r[1]] !== 'AYAM BARU') return;
-      if (r[8] !== dateStr) return;
 
       const mvt = R_MVT[r[5]];
       if (mvt === 'BAHAN') {
@@ -358,28 +363,24 @@ const Engine = (() => {
 
   // ── Calculate value for selected materials ──
   function calcMaterialValue(matIndices, filters, dateStr) {
-    // filters: { dept: 'All'|string, pv: 'All'|string, mvt: 'All'|string }
     let totalBrd = 0, totalKg = 0;
     const matSet = new Set(matIndices);
+    const dateRows = _rowsByDate.get(dateStr) || [];
 
-    RAW_DB.forEach(r => {
-      if (r[8] !== dateStr) return;
-      if (!matSet.has(r[4])) return; // r[4] = matdesc index
-
+    dateRows.forEach(r => {
+      if (!matSet.has(r[4])) return;
       const dept = R_DEPT[r[0]], pv = R_PV[r[1]], mvt = R_MVT[r[5]];
       if (filters.dept !== 'All' && dept !== filters.dept) return;
       if (filters.pv !== 'All' && pv !== filters.pv) return;
       if (filters.mvt !== 'All' && mvt !== filters.mvt) return;
-
       totalBrd += r[6];
       totalKg += r[7];
     });
 
-    // Calculate bahan for yield denominator (same dept + pv + date)
     let bahanKg = 0;
     if (filters.mvt !== 'BAHAN') {
-      RAW_DB.forEach(r => {
-        if (r[8] !== dateStr || R_MVT[r[5]] !== 'BAHAN') return;
+      dateRows.forEach(r => {
+        if (R_MVT[r[5]] !== 'BAHAN') return;
         const dept = R_DEPT[r[0]], pv = R_PV[r[1]];
         if (filters.dept !== 'All' && dept !== filters.dept) return;
         if (filters.pv !== 'All' && pv !== filters.pv) return;
@@ -389,27 +390,19 @@ const Engine = (() => {
 
     const yieldPct = (filters.mvt === 'BAHAN' || !bahanKg) ? null :
       Math.round(totalKg / bahanKg * 10000) / 100;
-
     return { brd: totalBrd, kg: totalKg, yieldPct };
   }
 
   // ── Get available filter options for selected materials ──
   function getMaterialFilterOptions(matIndices, dateStr, activeFilters) {
     const matSet = new Set(matIndices);
-    const depts = new Set(), pvs = new Set(), mvts = new Set();
+    const depts = new Set(), filteredPvs = new Set(), filteredMvts = new Set();
+    const dateRows = _rowsByDate.get(dateStr) || [];
 
-    RAW_DB.forEach(r => {
-      if (r[8] !== dateStr || !matSet.has(r[4])) return;
-      depts.add(R_DEPT[r[0]]);
-      pvs.add(R_PV[r[1]]);
-      mvts.add(R_MVT[r[5]]);
-    });
-
-    // Cascade: if dept selected, filter pv and mvt
-    const filteredPvs = new Set(), filteredMvts = new Set();
-    RAW_DB.forEach(r => {
-      if (r[8] !== dateStr || !matSet.has(r[4])) return;
+    dateRows.forEach(r => {
+      if (!matSet.has(r[4])) return;
       const dept = R_DEPT[r[0]], pv = R_PV[r[1]], mvt = R_MVT[r[5]];
+      depts.add(dept);
       if (activeFilters.dept !== 'All' && dept !== activeFilters.dept) return;
       filteredPvs.add(pv);
       if (activeFilters.pv !== 'All' && pv !== activeFilters.pv) return;
@@ -425,8 +418,9 @@ const Engine = (() => {
 
   // ── Check if material matches current filters ──
   function materialMatchesFilter(matIdx, filters, dateStr) {
-    return RAW_DB.some(r => {
-      if (r[8] !== dateStr || r[4] !== matIdx) return false;
+    const dateRows = _rowsByDate.get(dateStr) || [];
+    return dateRows.some(r => {
+      if (r[4] !== matIdx) return false;
       const dept = R_DEPT[r[0]], pv = R_PV[r[1]], mvt = R_MVT[r[5]];
       if (filters.dept !== 'All' && dept !== filters.dept) return false;
       if (filters.pv !== 'All' && pv !== filters.pv) return false;
@@ -436,40 +430,45 @@ const Engine = (() => {
   }
 
   function calcMaterialValueRange(matIndices, filters, dateArr) {
-    const dateSet = new Set(dateArr);
     const matSet = new Set(matIndices);
     let totalBrd = 0, totalKg = 0;
 
-    RAW_DB.forEach(r => {
-      if (!dateSet.has(r[8]) || !matSet.has(r[4])) return;
-      const dept = R_DEPT[r[0]], pv = R_PV[r[1]], mvt = R_MVT[r[5]];
-      if (filters.dept !== 'All' && dept !== filters.dept) return;
-      if (filters.pv !== 'All' && pv !== filters.pv) return;
-      if (filters.mvt !== 'All' && mvt !== filters.mvt) return;
-      totalBrd += r[6];
-      totalKg += r[7];
-    });
+    for (const d of dateArr) {
+      const dateRows = _rowsByDate.get(d);
+      if (!dateRows) continue;
+      for (const r of dateRows) {
+        if (!matSet.has(r[4])) continue;
+        const dept = R_DEPT[r[0]], pv = R_PV[r[1]], mvt = R_MVT[r[5]];
+        if (filters.dept !== 'All' && dept !== filters.dept) continue;
+        if (filters.pv !== 'All' && pv !== filters.pv) continue;
+        if (filters.mvt !== 'All' && mvt !== filters.mvt) continue;
+        totalBrd += r[6];
+        totalKg += r[7];
+      }
+    }
 
     let bahanKg = 0;
     if (filters.mvt !== 'BAHAN') {
-      RAW_DB.forEach(r => {
-        if (!dateSet.has(r[8]) || R_MVT[r[5]] !== 'BAHAN') return;
-        const dept = R_DEPT[r[0]], pv = R_PV[r[1]];
-        const sloc = R_SLOC[r[9]];
-        if (filters.dept !== 'All' && dept !== filters.dept) return;
-
-        const pvFilter = filters.pv;
-        let match = false;
-        if (pvFilter === 'AYAM BARU' || pvFilter === 'All') {
-          if (pv === 'AYAM BARU' && sloc === 'STAGING RM') match = true;
+      for (const d of dateArr) {
+        const dateRows = _rowsByDate.get(d);
+        if (!dateRows) continue;
+        for (const r of dateRows) {
+          if (R_MVT[r[5]] !== 'BAHAN') continue;
+          const dept = R_DEPT[r[0]], pv = R_PV[r[1]];
+          const sloc = R_SLOC[r[9]];
+          if (filters.dept !== 'All' && dept !== filters.dept) continue;
+          const pvFilter = filters.pv;
+          let match = false;
+          if (pvFilter === 'AYAM BARU' || pvFilter === 'All') {
+            if (pv === 'AYAM BARU' && sloc === 'STAGING RM') match = true;
+          }
+          if (pvFilter === 'AYAM LAMA' || pvFilter === 'All') {
+            if (pv === 'AYAM LAMA' && (sloc === 'CRP' || sloc === 'REPRO')) match = true;
+          }
+          if (!match) continue;
+          bahanKg += r[7];
         }
-        if (pvFilter === 'AYAM LAMA' || pvFilter === 'All') {
-          if (pv === 'AYAM LAMA' && (sloc === 'CRP' || sloc === 'REPRO')) match = true;
-        }
-        if (!match) return;
-
-        bahanKg += r[7];
-      });
+      }
     }
 
     const yieldPct = (filters.mvt === 'BAHAN' || !bahanKg) ? null :
@@ -478,38 +477,54 @@ const Engine = (() => {
   }
 
   function getMaterialFilterOptionsRange(matIndices, dateArr, activeFilters) {
-    const dateSet = new Set(dateArr);
     const matSet = new Set(matIndices);
     const depts = new Set(), filteredPvs = new Set(), filteredMvts = new Set();
 
-    RAW_DB.forEach(r => {
-      if (!dateSet.has(r[8]) || !matSet.has(r[4])) return;
-      const dept = R_DEPT[r[0]], pv = R_PV[r[1]], mvt = R_MVT[r[5]];
-      depts.add(dept);
-      if (activeFilters.dept !== 'All' && dept !== activeFilters.dept) return;
-      filteredPvs.add(pv);
-      if (activeFilters.pv !== 'All' && pv !== activeFilters.pv) return;
-      filteredMvts.add(mvt);
-    });
+    for (const d of dateArr) {
+      const dateRows = _rowsByDate.get(d);
+      if (!dateRows) continue;
+      for (const r of dateRows) {
+        if (!matSet.has(r[4])) continue;
+        const dept = R_DEPT[r[0]], pv = R_PV[r[1]], mvt = R_MVT[r[5]];
+        depts.add(dept);
+        if (activeFilters.dept !== 'All' && dept !== activeFilters.dept) continue;
+        filteredPvs.add(pv);
+        if (activeFilters.pv !== 'All' && pv !== activeFilters.pv) continue;
+        filteredMvts.add(mvt);
+      }
+    }
 
     return { depts: [...depts].sort(), pvs: [...filteredPvs].sort(), mvts: [...filteredMvts].sort() };
   }
 
   function materialMatchesFilterRange(matIdx, filters, dateArr) {
-    const dateSet = new Set(dateArr);
-    return RAW_DB.some(r => {
-      if (!dateSet.has(r[8]) || r[4] !== matIdx) return false;
-      const dept = R_DEPT[r[0]], pv = R_PV[r[1]], mvt = R_MVT[r[5]];
-      if (filters.dept !== 'All' && dept !== filters.dept) return false;
-      if (filters.pv !== 'All' && pv !== filters.pv) return false;
-      if (filters.mvt !== 'All' && mvt !== filters.mvt) return false;
-      return true;
-    });
+    for (const d of dateArr) {
+      const dateRows = _rowsByDate.get(d);
+      if (!dateRows) continue;
+      for (const r of dateRows) {
+        if (r[4] !== matIdx) continue;
+        const dept = R_DEPT[r[0]], pv = R_PV[r[1]], mvt = R_MVT[r[5]];
+        if (filters.dept !== 'All' && dept !== filters.dept) continue;
+        if (filters.pv !== 'All' && pv !== filters.pv) continue;
+        if (filters.mvt !== 'All' && mvt !== filters.mvt) continue;
+        return true;
+      }
+    }
+    return false;
   }
 
   function appendRows(newRows) {
     newRows.forEach(r => RAW_DB.push(r));
     buildDerivedData();
+  }
+
+  function getRowsForDates(dateArr) {
+    const result = [];
+    for (const d of dateArr) {
+      const rows = _rowsByDate.get(d);
+      if (rows) for (let i = 0; i < rows.length; i++) result.push(rows[i]);
+    }
+    return result;
   }
 
   // ── Weighted KPI for a date range ──
@@ -547,8 +562,8 @@ const Engine = (() => {
   // ── Yield per truck for a specific date ──
   function getYieldPerTruck(dateStr) {
     const trucks = {};
-    RAW_DB.forEach(r => {
-      if (r[8] !== dateStr) return;
+    const dateRows = _rowsByDate.get(dateStr) || [];
+    dateRows.forEach(r => {
       if (R_DEPT[r[0]] !== 'KARKAS' || R_PV[r[1]] !== 'AYAM BARU') return;
       const mvt = R_MVT[r[5]];
       if (mvt !== 'BAHAN' && mvt !== 'HASIL') return;
@@ -576,9 +591,10 @@ const Engine = (() => {
     pvMode = pvMode || 'AYAM BARU';
     let bahanKg = 0, hasilKg = 0, byprodKg = 0;
     let susutMinus = 0, susutPlus = 0;
+    const dateRows = _rowsByDate.get(dateStr) || [];
 
-    RAW_DB.forEach(r => {
-      if (r[8] !== dateStr || R_DEPT[r[0]] !== 'KARKAS') return;
+    dateRows.forEach(r => {
+      if (R_DEPT[r[0]] !== 'KARKAS') return;
       const pv = R_PV[r[1]], mvt = R_MVT[r[5]];
       if (pvMode !== 'AYAM PROSES' && pv !== pvMode) return;
       if (mvt === 'BAHAN') bahanKg += r[7];
@@ -610,6 +626,6 @@ const Engine = (() => {
     getYieldPerTruck, getKarkasFlow,
     searchMaterial, calcMaterialValue, getMaterialFilterOptions, materialMatchesFilter,
     calcMaterialValueRange, getMaterialFilterOptionsRange, materialMatchesFilterRange,
-    LB_SIZE_MAP, DIST_DEPTS, R_MVT, R_SLOC,
+    getRowsForDates, LB_SIZE_MAP, DIST_DEPTS, R_MVT, R_SLOC,
   };
 })();

@@ -1531,15 +1531,14 @@ const OverviewTablePage = (() => {
   }
 
   function _precomputeSmt(matIndices, dates, filters) {
-    const dateSet = new Set(dates);
     const matSet = new Set(matIndices);
     const lookups = Engine.getLookups();
     const matchingMats = new Set();
     const matDate = new Map();
     const bahanDate = new Map();
 
-    Engine.getRawDB().forEach(r => {
-      if (!dateSet.has(r[8])) return;
+    const rows = Engine.getRowsForDates(dates);
+    rows.forEach(r => {
       const dept = lookups.dept[r[0]], pv = lookups.pv[r[1]],
             mvt = lookups.mvt[r[5]], sloc = lookups.sloc[r[9]];
 
