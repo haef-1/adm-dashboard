@@ -115,9 +115,6 @@ const App = (() => {
     _bgRunning = false;
     hideBgLoader();
     console.log('[BG] Background load complete. Total appended: ' + allRows.length + ' rows');
-
-    const hash = location.hash.slice(1) || 'overview';
-    Navbar.navigateTo(hash);
   }
 
   function showSeedOverlay(text) {
