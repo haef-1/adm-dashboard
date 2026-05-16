@@ -283,7 +283,7 @@ const OverviewTablePage = (() => {
         const susut = Engine.getSusutLBForRange(wDates);
         rows.push({
           date: wDates[0],
-          label: "Week " + wk.slice(1) + ", " + wDates[0].split("-")[0],
+          label: "Week " + wk.split("-W")[1] + " " + wk.split("-W")[0],
           yk: kpi.yk,
           yb: kpi.yb,
           w: kpi.w,
@@ -815,7 +815,7 @@ const OverviewTablePage = (() => {
       weekKeys.forEach(wk => {
         const wDates = weekMap[wk];
         const dist = Engine.getBahanDistribution(wDates, bhnPvMode, bhnMetric);
-        const row = { date: wDates[0], label: "Week " + wk.slice(1) + ", " + wDates[0].split("-")[0] };
+        const row = { date: wDates[0], label: "Week " + wk.split("-W")[1] + " " + wk.split("-W")[0] };
         let total = 0;
         BAHAN_DEPTS.forEach(dept => {
           let sum = 0;
@@ -1495,13 +1495,13 @@ const OverviewTablePage = (() => {
     if (smtPeriod === "daily") {
       return dates.map(d => {
         const p = d.split("-");
-        return { key: d, label: p[2] + " " + MONTH_NAMES[parseInt(p[1])], dates: [d] };
+        return { key: d, label: p[2] + " " + MONTH_NAMES[parseInt(p[1])] + " " + p[0].slice(2), dates: [d] };
       });
     } else if (smtPeriod === "weekly") {
       const weekMap = getWeekMap(dates);
       return Object.keys(weekMap).map(wk => ({
         key: wk,
-        label: "W" + wk.split("-W")[1] + ", " + wk.split("-W")[0],
+        label: "W" + wk.split("-W")[1] + " " + wk.split("-W")[0].slice(2),
         dates: weekMap[wk],
       }));
     } else {

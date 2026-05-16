@@ -5,8 +5,16 @@
 const Charts = (() => {
   const instances = {};
   const observers = {};
+  const listeners = {};
 
   function destroy(id) {
+    if (listeners[id]) {
+      const canvas = document.getElementById(id);
+      if (canvas) {
+        listeners[id].forEach(([evt, fn]) => canvas.removeEventListener(evt, fn));
+      }
+      delete listeners[id];
+    }
     if (observers[id]) {
       observers[id].disconnect();
       delete observers[id];
@@ -163,13 +171,41 @@ const Charts = (() => {
     },
   };
 
+  // ── Highlight overlay plugin ──
+  const highlightState = {};
+
+  const highlightPlugin = {
+    id: 'barHighlight',
+    afterDatasetsDraw(chart) {
+      const state = highlightState[chart.canvas.id];
+      if (state == null || state < 0) return;
+      const ctx = chart.ctx;
+      const meta0 = chart.getDatasetMeta(0);
+      if (!meta0.data.length) return;
+
+      const chartArea = chart.chartArea;
+      chart.data.labels.forEach((_, bi) => {
+        if (bi === state) return;
+        const bar = meta0.data[bi];
+        if (!bar) return;
+        const { width } = bar.getProps(['width'], true);
+        const bx = bar.x - width / 2 - 4;
+        const bw = width + 8;
+        ctx.save();
+        ctx.fillStyle = 'rgba(255,255,255,0.65)';
+        ctx.fillRect(bx, chartArea.top, bw, chartArea.bottom - chartArea.top);
+        ctx.restore();
+      });
+    },
+  };
+
   // ── Stacked bar chart (Bahan per Dept) ──
-  function buildStackedBar(canvasId, data) {
+  function buildStackedBar(canvasId, data, onBarClick) {
     destroy(canvasId);
+    highlightState[canvasId] = -1;
     const ctx = document.getElementById(canvasId)?.getContext('2d');
     if (!ctx) return;
 
-    // data: { labels: ['24 Mar', ...], datasets: [{ label, data, color }] }
     const deptColors = {
       'CUT UP': '#34d399',
       'BONELESS': '#60a5fa',
@@ -194,7 +230,7 @@ const Charts = (() => {
     instances[canvasId] = new Chart(ctx, {
       type: 'bar',
       data: { labels: data.labels, datasets },
-      plugins: [gapRoundPlugin, stackedLabelsPlugin],
+      plugins: [gapRoundPlugin, stackedLabelsPlugin, highlightPlugin],
       options: {
         responsive: true,
         maintainAspectRatio: false,
@@ -228,8 +264,48 @@ const Charts = (() => {
       },
     });
 
-    // ResizeObserver: resize chart saat container berubah lebar
     const canvas = document.getElementById(canvasId);
+
+    if (onBarClick) {
+      const onMove = (e) => {
+        const chart = instances[canvasId];
+        if (!chart) return;
+        const els = chart.getElementsAtEventForMode(e, 'index', { intersect: true }, false);
+        canvas.style.cursor = els.length ? 'pointer' : 'default';
+      };
+      const onClick = (e) => {
+        const chart = instances[canvasId];
+        if (!chart) return;
+        const elements = chart.getElementsAtEventForMode(e, 'index', { intersect: true }, false);
+        if (!elements.length) {
+          highlightState[canvasId] = -1;
+          chart.draw();
+          onBarClick(-1, null);
+          return;
+        }
+        const bi = elements[0].index;
+        if (highlightState[canvasId] === bi) {
+          highlightState[canvasId] = -1;
+          chart.draw();
+          onBarClick(-1, null);
+        } else {
+          highlightState[canvasId] = bi;
+          chart.draw();
+          const bar0 = chart.getDatasetMeta(0).data[bi];
+          const rect = canvas.getBoundingClientRect();
+          const barX = bar0.x;
+          const barTopY = Math.min(...chart.data.datasets.map((_, di) => {
+            const el = chart.getDatasetMeta(di).data[bi];
+            return el ? el.getProps(['y'], true).y : Infinity;
+          }));
+          onBarClick(bi, { x: rect.left + barX, y: rect.top + barTopY, label: chart.data.labels[bi] });
+        }
+      };
+      canvas.addEventListener('mousemove', onMove);
+      canvas.addEventListener('click', onClick);
+      listeners[canvasId] = [['mousemove', onMove], ['click', onClick]];
+    }
+
     if (canvas && window.ResizeObserver) {
       const ro = new ResizeObserver(() => instances[canvasId]?.resize());
       ro.observe(canvas.parentElement);
@@ -272,5 +348,5 @@ const Charts = (() => {
     `;
   }
 
-  return { destroy, buildStackedBar, renderDonut, instances };
+  return { destroy, buildStackedBar, renderDonut, instances, highlightState };
 })();

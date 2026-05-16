@@ -544,6 +544,67 @@
   letter-spacing: 0.01em;
 }
 
+/* ── Bahan chart popover ── */
+.bahan-popover {
+  position: absolute;
+  z-index: 20;
+  background: #fff;
+  border: 1px solid #e2e4ed;
+  border-radius: 10px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+  padding: 10px 14px;
+  min-width: 180px;
+  opacity: 0;
+  pointer-events: auto;
+  transition: opacity 0.15s ease;
+}
+.bahan-popover-title {
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 700;
+  color: #4a4f6a;
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #eef0f6;
+}
+.bahan-popover-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 0;
+}
+.bahan-popover-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.bahan-popover-dept {
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 600;
+  color: #6b7094;
+  flex: 1;
+}
+.bahan-popover-val {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  color: #2d3152;
+  white-space: nowrap;
+}
+.bahan-popover-total {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid #eef0f6;
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 700;
+  color: #4a4f6a;
+}
+
 .y-axis-label {
   position: absolute;
   left: 0;
@@ -2237,4 +2298,96 @@
   text-align: left;
   font-family: var(--font-body);
   white-space: nowrap;
+}
+
+/* ── Karkas Table ── */
+.krk-table.smt-table td:first-child {
+  background: var(--surface);
+}
+.krk-table .krk-dept-row td {
+  background: inherit;
+}
+.krk-table .krk-dept-row td:first-child {
+  z-index: 2;
+}
+.krk-dept-row {
+  cursor: pointer;
+}
+.krk-dept-row:hover {
+  background: var(--surface-alt);
+}
+.krk-dept-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.krk-dept-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.krk-dept-toggle {
+  font-size: 9px;
+  color: var(--text-muted);
+  width: 12px;
+  text-align: center;
+}
+.krk-dept-count {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-muted);
+  margin-left: 4px;
+}
+.krk-sub-row td {
+  padding-top: 5px !important;
+  padding-bottom: 5px !important;
+}
+.krk-sub-row:hover td:first-child {
+  background: var(--blue-light) !important;
+}
+.krk-sub-row td:first-child {
+  padding-left: 32px;
+}
+.krk-sub-last td {
+  padding-bottom: 28px !important;
+}
+.krk-mat-cell {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-mid);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+.krk-col-latest {
+  background: rgba(59, 125, 221, 0.06);
+}
+.krk-table-wrap {
+  overflow-x: auto;
+  padding: 0;
+}
+.krk-table-wrap::-webkit-scrollbar {
+  display: none;
+}
+.krk-table-wrap {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.krk-scroll-proxy {
+  overflow-x: auto;
+  overflow-y: hidden;
+  background: var(--bg);
+}
+.krk-scroll-proxy > div {
+  height: 1px;
+}
+.krk-table thead th {
+  background: var(--bg);
+}
+.krk-table thead th:first-child {
+  z-index: 5;
 }

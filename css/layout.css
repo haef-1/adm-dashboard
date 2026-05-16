@@ -71,17 +71,22 @@
 }
 
 .sidebar-view-toggle {
-  padding: 8px 8px 0;
+  padding: 8px 6px 0;
   flex-shrink: 0;
 }
 
 .view-toggle-group {
   display: flex;
+  flex-direction: column;
   gap: 2px;
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 3px;
+}
+
+.sidebar:hover .view-toggle-group {
+  flex-direction: row;
 }
 
 .view-toggle-btn {
@@ -121,6 +126,14 @@
 .view-toggle-btn:hover {
   color: var(--text);
   background: var(--surface);
+}
+
+.view-toggle-btn:not(.active) {
+  display: none;
+}
+
+.sidebar:hover .view-toggle-btn:not(.active) {
+  display: flex;
 }
 
 .view-toggle-btn.active {

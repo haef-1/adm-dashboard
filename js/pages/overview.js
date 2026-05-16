@@ -383,6 +383,11 @@ const OverviewPage = (() => {
       </div>`,
       )
       .join("");
+
+    document.addEventListener("click", (e) => {
+      const wrap = document.getElementById("chartWrap");
+      if (!wrap || !wrap.contains(e.target)) closeBahanPopover();
+    });
   }
 
   function computeChartRange() {
@@ -439,13 +444,93 @@ const OverviewPage = (() => {
     return map;
   }
 
+  let _chartBarDetails = [];
+
+  function closeBahanPopover(skipRedraw) {
+    const old = document.getElementById("bahanPopover");
+    if (old) old.remove();
+    Charts.highlightState["bahanChart"] = -1;
+    if (!skipRedraw) {
+      const chart = Charts.instances["bahanChart"];
+      if (chart) chart.draw();
+    }
+  }
+
+  function showBahanPopover(bi, barMeta) {
+    const old = document.getElementById("bahanPopover");
+    if (old) old.remove();
+    if (bi < 0 || !barMeta || !_chartBarDetails[bi]) return;
+
+    const detail = _chartBarDetails[bi];
+    const isKg = chartMetric === "kg";
+    const deptColors = {
+      "CUT UP": "#34d399",
+      BONELESS: "#60a5fa",
+      AU: "#fbbf24",
+      PARTING: "#f472b6",
+    };
+
+    let total = 0;
+    const rows = Object.keys(deptColors).map((dept) => {
+      const val = detail[dept] || 0;
+      total += val;
+      return { dept, val, color: deptColors[dept] };
+    });
+
+    const fmtVal = (v) =>
+      isKg
+        ? v.toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " KG"
+        : Math.round(v).toLocaleString("id-ID") + " BRD";
+
+    const pop = document.createElement("div");
+    pop.id = "bahanPopover";
+    pop.className = "bahan-popover";
+    pop.innerHTML =
+      `<div class="bahan-popover-title">${barMeta.label}</div>` +
+      rows
+        .map(
+          (r) =>
+            `<div class="bahan-popover-row">
+              <span class="bahan-popover-dot" style="background:${r.color}"></span>
+              <span class="bahan-popover-dept">${r.dept}</span>
+              <span class="bahan-popover-val">${fmtVal(r.val)}</span>
+            </div>`,
+        )
+        .join("") +
+      `<div class="bahan-popover-total">
+        <span>TOTAL</span>
+        <span class="bahan-popover-val">${fmtVal(total)}</span>
+      </div>`;
+
+    const wrap = document.getElementById("chartWrap");
+    wrap.appendChild(pop);
+
+    const wrapRect = wrap.getBoundingClientRect();
+    const GAP = 24;
+    let left = barMeta.x - wrapRect.left + GAP;
+    let top = barMeta.y - wrapRect.top - 20;
+
+    const popW = pop.offsetWidth;
+    const popH = pop.offsetHeight;
+
+    if (left + popW > wrapRect.width) left = barMeta.x - wrapRect.left - popW - GAP;
+    if (top + popH > wrapRect.height) top = wrapRect.height - popH - 4;
+    if (top < 0) top = 4;
+
+    pop.style.left = left + "px";
+    pop.style.top = top + "px";
+    pop.style.opacity = "1";
+  }
+
   function renderBahanChart() {
+    closeBahanPopover(true);
     const dates = Engine.getAvailableDates();
     if (!dates.length) return;
 
     const MAX = 7;
     let labels = [],
       dataByDept = { "CUT UP": [], BONELESS: [], AU: [], PARTING: [] };
+    _chartBarDetails = [];
     let rangeFirst = null, rangeLast = null;
 
     if (chartPeriod === "daily") {
@@ -456,9 +541,12 @@ const OverviewPage = (() => {
       range.forEach((d) => {
         const parts = d.split("-");
         labels.push(parts[2] + " " + MONTH_NAMES[parseInt(parts[1])]);
+        const barDetail = {};
         Object.keys(dataByDept).forEach((dept) => {
           dataByDept[dept].push(dist[d]?.[dept] || 0);
+          barDetail[dept] = dist[d]?.[dept] || 0;
         });
+        _chartBarDetails.push(barDetail);
       });
       if (range.length) { rangeFirst = range[0]; rangeLast = range[range.length - 1]; }
     } else if (chartPeriod === "weekly") {
@@ -474,13 +562,16 @@ const OverviewPage = (() => {
           chartPvMode,
           chartMetric,
         );
+        const barDetail = {};
         Object.keys(dataByDept).forEach((dept) => {
           let sum = 0;
           weekMap[wk].forEach((d) => {
             sum += dist[d]?.[dept] || 0;
           });
           dataByDept[dept].push(sum);
+          barDetail[dept] = sum;
         });
+        _chartBarDetails.push(barDetail);
       });
       if (weekKeys.length) { rangeFirst = weekKeys[0]; rangeLast = weekKeys[weekKeys.length - 1]; }
     } else {
@@ -496,13 +587,16 @@ const OverviewPage = (() => {
           chartPvMode,
           chartMetric,
         );
+        const barDetail = {};
         Object.keys(dataByDept).forEach((dept) => {
           let sum = 0;
           monthMap[mk].forEach((d) => {
             sum += dist[d]?.[dept] || 0;
           });
           dataByDept[dept].push(sum);
+          barDetail[dept] = sum;
         });
+        _chartBarDetails.push(barDetail);
       });
       if (mKeys.length) { rangeFirst = mKeys[0]; rangeLast = mKeys[mKeys.length - 1]; }
     }
@@ -512,7 +606,10 @@ const OverviewPage = (() => {
       data: dataByDept[dept],
     }));
 
-    Charts.buildStackedBar("bahanChart", { labels, datasets });
+    Charts.buildStackedBar("bahanChart", { labels, datasets }, (bi, barMeta) => {
+      if (bi < 0) { closeBahanPopover(); return; }
+      showBahanPopover(bi, barMeta);
+    });
 
     const navEl = document.getElementById("chartRangeNav");
     if (navEl) {

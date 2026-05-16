@@ -86,6 +86,9 @@ const Navbar = (() => {
       case 'karkas':
         KarkasPage.render(container);
         break;
+      case 'karkas-table':
+        KarkasTablePage.render(container);
+        break;
       default:
         container.innerHTML = `
           <div style="padding:60px 40px;text-align:center;">
