@@ -546,7 +546,7 @@
 
 /* ── Bahan chart popover ── */
 .bahan-popover {
-  position: absolute;
+  position: fixed;
   z-index: 20;
   background: #fff;
   border: 1px solid #e2e4ed;
@@ -554,9 +554,21 @@
   box-shadow: 0 4px 20px rgba(0,0,0,0.12);
   padding: 10px 14px;
   min-width: 180px;
+  max-width: calc(100vw - 24px);
   opacity: 0;
   pointer-events: auto;
   transition: opacity 0.15s ease;
+}
+@media (max-width: 640px) {
+  .bahan-popover {
+    padding: 8px 10px;
+    min-width: 150px;
+    border-radius: 8px;
+  }
+  .bahan-popover-title { font-size: 11px; margin-bottom: 5px; padding-bottom: 4px; }
+  .bahan-popover-dept { font-size: 10px; }
+  .bahan-popover-val { font-size: 10px; }
+  .bahan-popover-total { font-size: 10px; margin-top: 4px; padding-top: 4px; }
 }
 .bahan-popover-title {
   font-family: var(--font-body);

@@ -386,6 +386,8 @@ const OverviewPage = (() => {
 
     document.addEventListener("click", (e) => {
       const wrap = document.getElementById("chartWrap");
+      const pop = document.getElementById("bahanPopover");
+      if (pop && pop.contains(e.target)) return;
       if (!wrap || !wrap.contains(e.target)) closeBahanPopover();
     });
   }
@@ -502,20 +504,22 @@ const OverviewPage = (() => {
         <span class="bahan-popover-val">${fmtVal(total)}</span>
       </div>`;
 
-    const wrap = document.getElementById("chartWrap");
-    wrap.appendChild(pop);
+    document.body.appendChild(pop);
 
-    const wrapRect = wrap.getBoundingClientRect();
-    const GAP = 24;
-    let left = barMeta.x - wrapRect.left + GAP;
-    let top = barMeta.y - wrapRect.top - 20;
-
+    const EDGE = 8;
+    const GAP = 16;
     const popW = pop.offsetWidth;
     const popH = pop.offsetHeight;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
 
-    if (left + popW > wrapRect.width) left = barMeta.x - wrapRect.left - popW - GAP;
-    if (top + popH > wrapRect.height) top = wrapRect.height - popH - 4;
-    if (top < 0) top = 4;
+    let left = barMeta.x + GAP;
+    let top = barMeta.y - 20;
+
+    if (left + popW > vw - EDGE) left = barMeta.x - popW - GAP;
+    if (left < EDGE) left = EDGE;
+    if (top + popH > vh - EDGE) top = vh - EDGE - popH;
+    if (top < EDGE) top = EDGE;
 
     pop.style.left = left + "px";
     pop.style.top = top + "px";
