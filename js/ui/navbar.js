@@ -74,6 +74,9 @@ const Navbar = (() => {
       item.classList.toggle('active', item.dataset.page === page || item.dataset.pageTable === page);
     });
 
+    // Clean up previous page
+    if (typeof KarkasTablePage !== 'undefined' && KarkasTablePage.destroy) KarkasTablePage.destroy();
+
     // Load page content
     const container = document.getElementById('pageContent');
     switch (page) {

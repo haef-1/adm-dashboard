@@ -280,10 +280,9 @@ const KarkasTablePage = (() => {
     const metric = krkMetric;
     const isKg = metric === "kg";
 
-    const fmtVal = (v) =>
-      isKg
-        ? v.toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-        : Math.round(v).toLocaleString("id-ID");
+    const _fmtKg = new Intl.NumberFormat("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const _fmtBrd = new Intl.NumberFormat("id-ID", { maximumFractionDigits: 0 });
+    const fmtVal = (v) => isKg ? _fmtKg.format(v) : _fmtBrd.format(Math.round(v));
 
     const metricLabel = isKg ? "KG" : "BRD";
 
@@ -327,28 +326,26 @@ const KarkasTablePage = (() => {
         <td data-v="${deptTotal}"><strong>${fmtVal(deptTotal)}</strong></td>
       </tr>`;
 
-      // Sub-rows per matdesc
-      if (!isCollapsed) {
-        matdescs.forEach((md, mi) => {
-          let rowTotal = 0;
-          const vals = columns.map(col => {
-            let sum = 0;
-            col.dates.forEach(d => {
-              const v = data[dept][md]?.[d];
-              if (v) sum += metric === "brd" ? v.brd : v.kg;
-            });
-            rowTotal += sum;
-            return sum;
+      // Sub-rows per matdesc (always rendered, hidden via display when collapsed)
+      matdescs.forEach((md, mi) => {
+        let rowTotal = 0;
+        const vals = columns.map(col => {
+          let sum = 0;
+          col.dates.forEach(d => {
+            const v = data[dept][md]?.[d];
+            if (v) sum += metric === "brd" ? v.brd : v.kg;
           });
-
-          const isLast = mi === matdescs.length - 1;
-          bodyHtml += `<tr class="krk-sub-row${isLast ? " krk-sub-last" : ""}">
-            <td class="krk-mat-cell" title="${md}">${md}</td>
-            ${vals.map((v, i) => `<td data-v="${v}"${i === lastIdx ? ' class="krk-col-latest"' : ''}>${fmtVal(v)}</td>`).join("")}
-            <td data-v="${rowTotal}">${fmtVal(rowTotal)}</td>
-          </tr>`;
+          rowTotal += sum;
+          return sum;
         });
-      }
+
+        const isLast = mi === matdescs.length - 1;
+        bodyHtml += `<tr class="krk-sub-row${isLast ? " krk-sub-last" : ""}" data-dept="${dept}"${isCollapsed ? ' style="display:none"' : ''}>
+          <td class="krk-mat-cell" title="${md}">${md}</td>
+          ${vals.map((v, i) => `<td data-v="${v}"${i === lastIdx ? ' class="krk-col-latest"' : ''}>${fmtVal(v)}</td>`).join("")}
+          <td data-v="${rowTotal}">${fmtVal(rowTotal)}</td>
+        </tr>`;
+      });
 
     });
 
@@ -373,12 +370,17 @@ const KarkasTablePage = (() => {
       </table>
     `;
 
-    // Toggle collapsed
+    // Toggle collapsed (DOM toggle, no full re-render)
     wrap.querySelectorAll(".krk-dept-row").forEach(row => {
       row.addEventListener("click", () => {
         const dept = row.dataset.dept;
         collapsedDepts[dept] = !collapsedDepts[dept];
-        renderTable();
+        const hidden = collapsedDepts[dept];
+        wrap.querySelectorAll(`.krk-sub-row[data-dept="${dept}"]`).forEach(sr => {
+          sr.style.display = hidden ? "none" : "";
+        });
+        const toggle = row.querySelector(".krk-dept-toggle");
+        if (toggle) toggle.innerHTML = hidden ? "&#9654;" : "&#9660;";
       });
     });
 
@@ -515,11 +517,13 @@ const KarkasTablePage = (() => {
       currentDept = null;
     }
 
+    const cachedDeptRows = [...table.querySelectorAll(".krk-dept-row")];
+
     function updateDeptRow() {
       if (!headerActive) return;
 
       const containerBottom = fixedContainer.getBoundingClientRect().bottom;
-      const deptRows = table.querySelectorAll(".krk-dept-row");
+      const deptRows = cachedDeptRows;
       let pinned = null;
 
       for (let i = 0; i < deptRows.length; i++) {
@@ -957,5 +961,9 @@ const KarkasTablePage = (() => {
     XLSX.writeFile(wb, `Karkas_${krkPeriod}_${new Date().toISOString().slice(0, 10)}.xlsx`);
   }
 
-  return { render };
+  function destroy() {
+    if (_stickyCleanup) { _stickyCleanup(); _stickyCleanup = null; }
+  }
+
+  return { render, destroy };
 })();

@@ -23,6 +23,7 @@ const Engine = (() => {
   let _susutByDate = {};
   let _bahanDistByDate = {};
   let _rowsByDate = new Map();
+  let _dateSet = new Set();
 
   // ── Livebird S/M/L mapping (mat code → category) ──
   const LB_SIZE_MAP = {
@@ -47,14 +48,32 @@ const Engine = (() => {
     if (lookups.matdesc) R_MATDESC = lookups.matdesc;
     if (lookups.mvt) { R_MVT.length = 0; lookups.mvt.forEach(v => R_MVT.push(v)); }
     if (lookups.sloc) { R_SLOC.length = 0; lookups.sloc.forEach(v => R_SLOC.push(v)); }
+    _rebuildReverseMaps();
   }
 
   // ── Auto-grow lookup: return index, add if new ──
   const LOOKUP_MAP = { dept: () => R_DEPT, pv: () => R_PV, order: () => R_ORDER, mat: () => R_MAT, matdesc: () => R_MATDESC, mvt: () => R_MVT, sloc: () => R_SLOC };
+  const LOOKUP_RMAP = {};
+
+  function _rebuildReverseMaps() {
+    Object.keys(LOOKUP_MAP).forEach(type => {
+      const arr = LOOKUP_MAP[type]();
+      const m = new Map();
+      for (let i = 0; i < arr.length; i++) m.set(arr[i], i);
+      LOOKUP_RMAP[type] = m;
+    });
+  }
+
   function growLookup(type, value) {
-    const arr = LOOKUP_MAP[type]();
-    let idx = arr.indexOf(value);
-    if (idx === -1) { idx = arr.length; arr.push(value); }
+    let rmap = LOOKUP_RMAP[type];
+    if (!rmap) { rmap = new Map(); LOOKUP_RMAP[type] = rmap; }
+    let idx = rmap.get(value);
+    if (idx === undefined) {
+      const arr = LOOKUP_MAP[type]();
+      idx = arr.length;
+      arr.push(value);
+      rmap.set(value, idx);
+    }
     return idx;
   }
 
@@ -81,48 +100,36 @@ const Engine = (() => {
     };
   }
 
-  // ── Build all derived data + indices from RAW_DB (single scan) ──
-  function buildDerivedData() {
-    YIELD_DATA = [];
-    ALL_RAW = [];
-    _yieldByDate = {};
-    _susutByDate = {};
-    _bahanDistByDate = {};
-    _rowsByDate = new Map();
+  function _cleanGrade(matdesc) {
+    return matdesc.replace(/^KARKAS\s*\(\s*/, '').replace(/\s*\)\s*$/, '').replace(/\s*-\s*/g, '-').trim();
+  }
 
-    const dateSet = new Set();
-    const karkasByDate = {};
-
-    function cleanGrade(matdesc) {
-      return matdesc.replace(/^KARKAS\s*\(\s*/, '').replace(/\s*\)\s*$/, '').replace(/\s*-\s*/g, '-').trim();
-    }
-
-    RAW_DB.forEach(r => {
+  // ── Process rows into indices (used by both full build and incremental append) ──
+  function _processRows(rows) {
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i];
       const dept = R_DEPT[r[0]], pv = R_PV[r[1]], mvt = R_MVT[r[5]],
             sloc = R_SLOC[r[9]], matdesc = R_MATDESC[r[4]], date = r[8];
 
-      dateSet.add(date);
+      _dateSet.add(date);
 
       let bucket = _rowsByDate.get(date);
       if (!bucket) { bucket = []; _rowsByDate.set(date, bucket); }
       bucket.push(r);
 
-      // YIELD_DATA source: KARKAS + AYAM BARU
       if (dept === 'KARKAS' && pv === 'AYAM BARU' &&
           (mvt === 'BAHAN' || mvt === 'HASIL' || mvt === 'BY PRODUCT')) {
-        if (!karkasByDate[date]) karkasByDate[date] = { bahan: 0, hasil: 0, byprod: 0 };
-        if (mvt === 'BAHAN') karkasByDate[date].bahan += r[7];
-        else if (mvt === 'HASIL') karkasByDate[date].hasil += r[7];
-        else karkasByDate[date].byprod += r[7];
+        if (!_yieldByDate[date]) _yieldByDate[date] = { bahan: 0, hasil: 0, byprod: 0 };
+        if (mvt === 'BAHAN') _yieldByDate[date].bahan += r[7];
+        else if (mvt === 'HASIL') _yieldByDate[date].hasil += r[7];
+        else _yieldByDate[date].byprod += r[7];
       }
 
-      // ALL_RAW: distribution chart
       if (DIST_DEPTS.has(dept) && pv === 'AYAM BARU' && mvt === 'BAHAN' &&
           sloc === 'STAGING RM' && matdesc.includes('KARKAS')) {
-        ALL_RAW.push({ dept, grade: cleanGrade(matdesc), brd: r[6], kg: r[7], date });
+        ALL_RAW.push({ dept, grade: _cleanGrade(matdesc), brd: r[6], kg: r[7], date });
       }
 
-      // Susut LB index
       if (dept === 'KARKAS' && sloc === 'LIVEBIRD') {
         if (!_susutByDate[date]) _susutByDate[date] = { bahan: 0, minus: 0, plus: 0 };
         if (mvt === 'BAHAN') _susutByDate[date].bahan += r[7];
@@ -130,7 +137,6 @@ const Engine = (() => {
         else if (mvt === 'SUSUT (+)') _susutByDate[date].plus += r[7];
       }
 
-      // Bahan distribution index
       if (DIST_DEPTS.has(dept) && mvt === 'BAHAN') {
         const dk = (dept === 'BONELESS BONGKAR' || dept === 'BONELESS MIX') ? 'BONELESS' : dept;
         const isAB = pv === 'AYAM BARU' && sloc === 'STAGING RM' && matdesc.includes('KARKAS');
@@ -143,14 +149,14 @@ const Engine = (() => {
           if (isAL) { e.al_brd += r[6]; e.al_kg += r[7]; }
         }
       }
-    });
+    }
+  }
 
-    // Index all karkas aggregates (getKpiForRange uses this)
-    _yieldByDate = karkasByDate;
-
-    // Build YIELD_DATA array (only dates with bahan>0, for yield chart)
-    Object.keys(karkasByDate).sort().forEach(d => {
-      const v = karkasByDate[d];
+  // ── Rebuild derived arrays from accumulated indices ──
+  function _finalize() {
+    YIELD_DATA = [];
+    Object.keys(_yieldByDate).sort().forEach(d => {
+      const v = _yieldByDate[d];
       if (!v.bahan) return;
       const [, mm, dd] = d.split('-');
       YIELD_DATA.push({
@@ -161,8 +167,21 @@ const Engine = (() => {
         w: Math.round((1 - (v.hasil + v.byprod) / v.bahan) * 10000) / 100,
       });
     });
+    _allDates = [..._dateSet].sort();
+  }
 
-    _allDates = [...dateSet].sort();
+  // ── Build all derived data + indices from RAW_DB (full rebuild) ──
+  function buildDerivedData() {
+    YIELD_DATA = [];
+    ALL_RAW = [];
+    _yieldByDate = {};
+    _susutByDate = {};
+    _bahanDistByDate = {};
+    _rowsByDate = new Map();
+    _dateSet = new Set();
+
+    _processRows(RAW_DB);
+    _finalize();
   }
 
   // ── Volume-weighted average ──
@@ -514,8 +533,9 @@ const Engine = (() => {
   }
 
   function appendRows(newRows) {
-    newRows.forEach(r => RAW_DB.push(r));
-    buildDerivedData();
+    for (let i = 0; i < newRows.length; i++) RAW_DB.push(newRows[i]);
+    _processRows(newRows);
+    _finalize();
   }
 
   function getRowsForDates(dateArr) {
