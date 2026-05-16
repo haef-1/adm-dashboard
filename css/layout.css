@@ -525,6 +525,14 @@
     display: inline;
   }
 
+  .sidebar.open .view-toggle-group {
+    flex-direction: row;
+  }
+
+  .sidebar.open .view-toggle-btn:not(.active) {
+    display: flex;
+  }
+
   .sidebar.open .sidebar-hamburger { display: none; }
   .sidebar.open .sidebar-logo { display: flex; }
   .sidebar.open .sidebar-header { justify-content: flex-start; }
