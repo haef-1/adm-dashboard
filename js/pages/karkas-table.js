@@ -415,28 +415,24 @@ const KarkasTablePage = (() => {
     wrap.parentNode.insertBefore(scrollProxy, wrap);
     scrollProxyInner.style.width = table.offsetWidth + "px";
 
-    // Bidirectional sync between proxy and wrapper
+    // Bidirectional sync between proxy and wrapper (batched in rAF)
     let scrollRaf = 0;
-    function scheduleSync() {
+    let scrollSource = null;
+    function onScrollFrom(source) {
+      scrollSource = source;
       if (!scrollRaf) { scrollRaf = requestAnimationFrame(() => {
         scrollRaf = 0;
+        const sl = scrollSource.scrollLeft;
+        syncing = true;
+        if (scrollSource !== wrap) wrap.scrollLeft = sl;
+        if (scrollSource !== scrollProxy) scrollProxy.scrollLeft = sl;
+        if (scrollSource !== fixedScroll) fixedScroll.scrollLeft = sl;
+        syncing = false;
         syncFixedScroll();
       }); }
     }
-    scrollProxy.addEventListener("scroll", () => {
-      if (syncing) return;
-      syncing = true;
-      wrap.scrollLeft = scrollProxy.scrollLeft;
-      syncing = false;
-      scheduleSync();
-    });
-    wrap.addEventListener("scroll", () => {
-      if (syncing) return;
-      syncing = true;
-      scrollProxy.scrollLeft = wrap.scrollLeft;
-      syncing = false;
-      scheduleSync();
-    });
+    scrollProxy.addEventListener("scroll", () => { if (!syncing) onScrollFrom(scrollProxy); }, { passive: true });
+    wrap.addEventListener("scroll", () => { if (!syncing) onScrollFrom(wrap); }, { passive: true });
 
     // Sentinel: triggers when scroll proxy crosses the topbar
     const sentinel = document.createElement("div");
@@ -455,23 +451,21 @@ const KarkasTablePage = (() => {
     fixedScroll.appendChild(fixedScrollInner);
     fixedScrollInner.style.height = "1px";
     fixedContainer.appendChild(fixedScroll);
-    fixedScroll.addEventListener("scroll", () => {
-      if (syncing) return;
-      syncing = true;
-      wrap.scrollLeft = fixedScroll.scrollLeft;
-      scrollProxy.scrollLeft = fixedScroll.scrollLeft;
-      syncing = false;
-      scheduleSync();
-    });
+    fixedScroll.addEventListener("scroll", () => { if (!syncing) onScrollFrom(fixedScroll); }, { passive: true });
 
     // Fixed header inside same container
     const fixedHeaderWrap = document.createElement("div");
-    fixedHeaderWrap.style.cssText = "overflow:hidden;";
+    fixedHeaderWrap.style.cssText = "overflow:hidden;position:relative;";
     const cloneTable = document.createElement("table");
     cloneTable.className = table.className;
     cloneTable.style.willChange = "transform";
     fixedHeaderWrap.appendChild(cloneTable);
     fixedContainer.appendChild(fixedHeaderWrap);
+
+    // Pinned first-th overlay (stays at left:0 above scrolling header)
+    const pinnedHeaderCell = document.createElement("div");
+    pinnedHeaderCell.className = "krk-pinned-header-cell";
+    fixedHeaderWrap.appendChild(pinnedHeaderCell);
 
     // Fixed dept row clone (separate, below container)
     const deptBar = document.createElement("div");
@@ -483,18 +477,19 @@ const KarkasTablePage = (() => {
     deptBar.appendChild(deptCloneTable);
     document.body.appendChild(deptBar);
 
-    let cachedHeaderTh = null;
+    // Pinned first-td overlay for dept bar
+    const pinnedDeptCell = document.createElement("div");
+    pinnedDeptCell.className = "krk-pinned-dept-cell";
+    deptBar.appendChild(pinnedDeptCell);
+
     let cachedDeptTd = null;
 
     function syncFixedScroll() {
       if (!headerActive) return;
       const sl = wrap.scrollLeft;
       const tx = "translateX(" + -sl + "px)";
-      const counterTx = "translateX(" + sl + "px)";
       cloneTable.style.transform = tx;
       deptCloneTable.style.transform = tx;
-      if (cachedDeptTd) cachedDeptTd.style.transform = counterTx;
-      if (cachedHeaderTh) cachedHeaderTh.style.transform = counterTx;
     }
 
     function activateHeader() {
@@ -512,7 +507,12 @@ const KarkasTablePage = (() => {
       cloneTable.appendChild(clone);
       cloneTable.style.tableLayout = "fixed";
       cloneTable.style.width = table.offsetWidth + "px";
-      cachedHeaderTh = cloneTable.querySelector("th:first-child");
+
+      // Populate pinned header cell
+      const origFirstTh = origThs[0];
+      pinnedHeaderCell.textContent = origFirstTh.textContent;
+      pinnedHeaderCell.style.width = origFirstTh.offsetWidth + "px";
+      pinnedHeaderCell.style.height = origFirstTh.offsetHeight + "px";
 
       const wrapRect = wrap.getBoundingClientRect();
 
@@ -523,7 +523,6 @@ const KarkasTablePage = (() => {
       fixedContainer.style.width = wrap.clientWidth + "px";
       const sl = wrap.scrollLeft;
       cloneTable.style.transform = "translateX(" + -sl + "px)";
-      if (cachedHeaderTh) cachedHeaderTh.style.transform = "translateX(" + sl + "px)";
       fixedContainer.style.display = "";
 
       updateDeptRow();
@@ -570,14 +569,19 @@ const KarkasTablePage = (() => {
           cloneCells[i].style.width = td.offsetWidth + "px";
           cloneCells[i].style.minWidth = td.offsetWidth + "px";
         });
-        cloneCells[0].style.background = DEPT_BG[dept] || "var(--bg)";
         const tbody = document.createElement("tbody");
         tbody.appendChild(cloneRow);
         deptCloneTable.innerHTML = "";
         deptCloneTable.appendChild(tbody);
         deptCloneTable.style.tableLayout = "fixed";
         deptCloneTable.style.width = table.offsetWidth + "px";
-        cachedDeptTd = cloneCells[0];
+
+        // Populate pinned dept cell
+        const firstTd = origCells[0];
+        pinnedDeptCell.innerHTML = firstTd.innerHTML;
+        pinnedDeptCell.style.width = firstTd.offsetWidth + "px";
+        pinnedDeptCell.style.height = pinned.offsetHeight + "px";
+        pinnedDeptCell.style.background = DEPT_BG[dept] || "var(--bg)";
       }
 
       const wrapRect = wrap.getBoundingClientRect();
@@ -586,7 +590,6 @@ const KarkasTablePage = (() => {
       deptBar.style.left = wrapRect.left + "px";
       deptBar.style.width = wrap.clientWidth + "px";
       deptCloneTable.style.transform = "translateX(" + -sl + "px)";
-      if (cachedDeptTd) cachedDeptTd.style.transform = "translateX(" + sl + "px)";
       deptBar.style.display = "";
     }
 
