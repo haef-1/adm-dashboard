@@ -50,7 +50,7 @@
       const fillDeg = Math.min(progress / 0.9, 1) * 324;
       spinner.style.setProperty("--ptr-progress", fillDeg + "deg");
       if (progress >= 0.9) {
-        const rotateDeg = Math.min((progress - 0.9) / 0.1, 1) * 360;
+        const rotateDeg = Math.min((progress - 0.9) / 0.1, 1) * 180;
         spinner.style.transform = "rotate(" + rotateDeg + "deg)";
       } else {
         spinner.style.transform = "";
