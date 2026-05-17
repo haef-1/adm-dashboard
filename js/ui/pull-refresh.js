@@ -41,7 +41,7 @@
         pulling = false;
         indicator.style.transform = "translateY(-100%)";
         indicator.classList.remove("ready");
-        spinner.classList.remove("ptr-spinning");
+        spinner.style.transform = "";
         return;
       }
       const pull = Math.min(dy * 0.4, MAX_PULL);
@@ -50,9 +50,10 @@
       const fillDeg = Math.min(progress / 0.9, 1) * 324;
       spinner.style.setProperty("--ptr-progress", fillDeg + "deg");
       if (progress >= 0.9) {
-        spinner.classList.add("ptr-spinning");
+        const rotateDeg = Math.min((progress - 0.9) / 0.1, 1) * 360;
+        spinner.style.transform = "rotate(" + rotateDeg + "deg)";
       } else {
-        spinner.classList.remove("ptr-spinning");
+        spinner.style.transform = "";
       }
       indicator.classList.toggle("ready", pull >= THRESHOLD);
     }, { passive: true });
@@ -61,13 +62,14 @@
       if (!pulling) return;
       pulling = false;
       if (indicator.classList.contains("ready")) {
+        spinner.style.transform = "";
         indicator.classList.add("refreshing");
         indicator.style.transform = "translateY(20px)";
         setTimeout(() => location.reload(), 600);
       } else {
         indicator.style.transform = "translateY(-100%)";
         spinner.style.setProperty("--ptr-progress", "0deg");
-        spinner.classList.remove("ptr-spinning");
+        spinner.style.transform = "";
         indicator.classList.remove("ready");
       }
     });

@@ -51,6 +51,7 @@ const App = (() => {
     await boot();
   }
 
+  let _hiddenAt = 0;
   function showWelcome(user, isReturning) {
     const name = user.user_metadata?.full_name || user.email.split('@')[0];
     const toast = document.getElementById('welcomeToast');
@@ -59,6 +60,13 @@ const App = (() => {
     toast.classList.add('show');
     setTimeout(() => toast.classList.remove('show'), 3000);
   }
+
+  document.addEventListener('visibilitychange', async () => {
+    if (document.hidden) { _hiddenAt = Date.now(); return; }
+    if (Date.now() - _hiddenAt < 3000) return;
+    const session = await Auth.getSession();
+    if (session) showWelcome(session.user, true);
+  });
 
   async function boot() {
     console.log('[App] Loading data from Supabase...');
