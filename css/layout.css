@@ -595,11 +595,6 @@
   background: conic-gradient(var(--blue) var(--ptr-progress, 0deg), var(--border) 0deg);
   -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2.5px), #000 calc(100% - 2.5px));
   mask: radial-gradient(farthest-side, transparent calc(100% - 2.5px), #000 calc(100% - 2.5px));
-  opacity: 0;
-  transition: opacity 0.15s;
-}
-.ptr-indicator.ready .ptr-spinner {
-  opacity: 1;
 }
 .ptr-indicator.refreshing .ptr-spinner {
   opacity: 1;
