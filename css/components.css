@@ -2264,10 +2264,11 @@
 
 .smt-table th:first-child,
 .smt-table td:first-child {
-  position: sticky;
-  left: 0;
+  position: relative;
   z-index: 2;
   background: var(--surface);
+  transform: translateX(var(--scroll-x, 0px));
+  will-change: transform;
 }
 
 .smt-table thead th:first-child {

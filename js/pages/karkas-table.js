@@ -417,19 +417,26 @@ const KarkasTablePage = (() => {
 
     // Bidirectional sync between proxy and wrapper
     let scrollRaf = 0;
+    function scheduleSync() {
+      if (!scrollRaf) { scrollRaf = requestAnimationFrame(() => {
+        scrollRaf = 0;
+        wrap.style.setProperty("--scroll-x", wrap.scrollLeft + "px");
+        syncFixedScroll();
+      }); }
+    }
     scrollProxy.addEventListener("scroll", () => {
       if (syncing) return;
       syncing = true;
       wrap.scrollLeft = scrollProxy.scrollLeft;
       syncing = false;
-      if (!scrollRaf) { scrollRaf = requestAnimationFrame(() => { scrollRaf = 0; syncFixedScroll(); }); }
+      scheduleSync();
     });
     wrap.addEventListener("scroll", () => {
       if (syncing) return;
       syncing = true;
       scrollProxy.scrollLeft = wrap.scrollLeft;
       syncing = false;
-      if (!scrollRaf) { scrollRaf = requestAnimationFrame(() => { scrollRaf = 0; syncFixedScroll(); }); }
+      scheduleSync();
     });
 
     // Sentinel: triggers when scroll proxy crosses the topbar
@@ -455,7 +462,7 @@ const KarkasTablePage = (() => {
       wrap.scrollLeft = fixedScroll.scrollLeft;
       scrollProxy.scrollLeft = fixedScroll.scrollLeft;
       syncing = false;
-      if (!scrollRaf) { scrollRaf = requestAnimationFrame(() => { scrollRaf = 0; syncFixedScroll(); }); }
+      scheduleSync();
     });
 
     // Fixed header inside same container
@@ -477,16 +484,18 @@ const KarkasTablePage = (() => {
     deptBar.appendChild(deptCloneTable);
     document.body.appendChild(deptBar);
 
+    let cachedHeaderTh = null;
+    let cachedDeptTd = null;
+
     function syncFixedScroll() {
       if (!headerActive) return;
       const sl = wrap.scrollLeft;
       const tx = "translateX(" + -sl + "px)";
+      const counterTx = "translateX(" + sl + "px)";
       cloneTable.style.transform = tx;
       deptCloneTable.style.transform = tx;
-      const deptFirstTd = deptCloneTable.querySelector("td:first-child");
-      if (deptFirstTd) deptFirstTd.style.transform = "translateX(" + sl + "px)";
-      const headerFirstTh = cloneTable.querySelector("th:first-child");
-      if (headerFirstTh) headerFirstTh.style.transform = "translateX(" + sl + "px)";
+      if (cachedDeptTd) cachedDeptTd.style.transform = counterTx;
+      if (cachedHeaderTh) cachedHeaderTh.style.transform = counterTx;
     }
 
     function activateHeader() {
@@ -504,6 +513,7 @@ const KarkasTablePage = (() => {
       cloneTable.appendChild(clone);
       cloneTable.style.tableLayout = "fixed";
       cloneTable.style.width = table.offsetWidth + "px";
+      cachedHeaderTh = cloneTable.querySelector("th:first-child");
 
       const wrapRect = wrap.getBoundingClientRect();
 
@@ -514,8 +524,7 @@ const KarkasTablePage = (() => {
       fixedContainer.style.width = wrap.clientWidth + "px";
       const sl = wrap.scrollLeft;
       cloneTable.style.transform = "translateX(" + -sl + "px)";
-      const headerFirstTh = cloneTable.querySelector("th:first-child");
-      if (headerFirstTh) headerFirstTh.style.transform = "translateX(" + sl + "px)";
+      if (cachedHeaderTh) cachedHeaderTh.style.transform = "translateX(" + sl + "px)";
       fixedContainer.style.display = "";
 
       updateDeptRow();
@@ -569,6 +578,7 @@ const KarkasTablePage = (() => {
         deptCloneTable.appendChild(tbody);
         deptCloneTable.style.tableLayout = "fixed";
         deptCloneTable.style.width = table.offsetWidth + "px";
+        cachedDeptTd = cloneCells[0];
       }
 
       const wrapRect = wrap.getBoundingClientRect();
@@ -577,8 +587,7 @@ const KarkasTablePage = (() => {
       deptBar.style.left = wrapRect.left + "px";
       deptBar.style.width = wrap.clientWidth + "px";
       deptCloneTable.style.transform = "translateX(" + -sl + "px)";
-      const deptFirstTd = deptCloneTable.querySelector("td:first-child");
-      if (deptFirstTd) deptFirstTd.style.transform = "translateX(" + sl + "px)";
+      if (cachedDeptTd) cachedDeptTd.style.transform = "translateX(" + sl + "px)";
       deptBar.style.display = "";
     }
 
