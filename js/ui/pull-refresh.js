@@ -42,8 +42,10 @@
         return;
       }
       const pull = Math.min(dy * 0.4, MAX_PULL);
+      const progress = Math.min(pull / (THRESHOLD * 0.4), 1);
       indicator.style.transform = "translateY(" + (pull - 40) + "px)";
-      indicator.classList.toggle("ready", pull >= THRESHOLD * 0.4);
+      indicator.querySelector(".ptr-spinner").style.setProperty("--ptr-progress", (progress * 360) + "deg");
+      indicator.classList.toggle("ready", progress >= 1);
     }, { passive: true });
 
     sc.addEventListener("touchend", () => {
@@ -51,10 +53,12 @@
       pulling = false;
       if (indicator.classList.contains("ready")) {
         indicator.classList.add("refreshing");
+        indicator.querySelector(".ptr-spinner").style.setProperty("--ptr-progress", "270deg");
         indicator.style.transform = "translateY(20px)";
         setTimeout(() => location.reload(), 300);
       } else {
         indicator.style.transform = "translateY(-100%)";
+        indicator.querySelector(".ptr-spinner").style.setProperty("--ptr-progress", "0deg");
         indicator.classList.remove("ready");
       }
     });

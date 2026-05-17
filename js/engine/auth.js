@@ -3,6 +3,8 @@
    ═══════════════════════════════════════ */
 
 const Auth = (() => {
+  const IDLE_TIMEOUT = 15 * 60 * 1000;
+
   function getClient() {
     return DB.getClient();
   }
@@ -13,7 +15,8 @@ const Auth = (() => {
   }
 
   function shouldRestoreSession() {
-    return sessionStorage.getItem('sessionActive') === '1';
+    const last = parseInt(localStorage.getItem('lastActivity') || '0', 10);
+    return (Date.now() - last) < IDLE_TIMEOUT;
   }
 
   async function getUser() {
@@ -29,7 +32,7 @@ const Auth = (() => {
     } else {
       localStorage.removeItem('savedCredentials');
     }
-    sessionStorage.setItem('sessionActive', '1');
+    localStorage.setItem('lastActivity', Date.now().toString());
     return data;
   }
 
@@ -40,11 +43,11 @@ const Auth = (() => {
   }
 
   async function signOut() {
-    sessionStorage.removeItem('sessionActive');
+    localStorage.removeItem('lastActivity');
     _role = null;
     const { error } = await getClient().auth.signOut();
     if (error) throw error;
-    showLogin();
+    location.reload();
   }
 
   function onAuthChange(callback) {
@@ -171,15 +174,15 @@ const Auth = (() => {
     });
   }
 
-  // ── Idle timeout (15 minutes) ──
-  const IDLE_TIMEOUT = 15 * 60 * 1000;
+  // ── Idle timeout ──
   let _idleTimer = null;
 
   function _resetIdleTimer() {
     if (_idleTimer) clearTimeout(_idleTimer);
+    localStorage.setItem('lastActivity', Date.now().toString());
     _idleTimer = setTimeout(async () => {
       stopIdleWatch();
-      sessionStorage.removeItem('sessionActive');
+      localStorage.removeItem('lastActivity');
       _role = null;
       await getClient().auth.signOut();
       const modal = document.getElementById('sessionModal');
@@ -187,7 +190,7 @@ const Auth = (() => {
       modal.classList.add('show');
       btn.onclick = () => {
         modal.classList.remove('show');
-        showLogin();
+        location.reload();
       };
     }, IDLE_TIMEOUT);
   }

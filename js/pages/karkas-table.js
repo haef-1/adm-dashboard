@@ -482,6 +482,22 @@ const KarkasTablePage = (() => {
     pinnedDeptCell.className = "krk-pinned-dept-cell";
     deptBar.appendChild(pinnedDeptCell);
 
+    // Click on sticky dept bar toggles collapse
+    deptBar.style.cursor = "pointer";
+    deptBar.addEventListener("click", () => {
+      if (!currentDept) return;
+      const origRow = cachedDeptRows.find(r => r.dataset.dept === currentDept);
+      if (!origRow) return;
+      // Scroll so the dept row sits right below fixed header before collapse
+      const containerBottom = fixedContainer.getBoundingClientRect().bottom;
+      const rowRect = origRow.getBoundingClientRect();
+      const sc = document.querySelector(".page-content");
+      if (sc) sc.scrollTop += rowRect.top - containerBottom;
+      origRow.click();
+      currentDept = null;
+      updateDeptRow();
+    });
+
     let cachedDeptTd = null;
 
     function syncFixedScroll() {
