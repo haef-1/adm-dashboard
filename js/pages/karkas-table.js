@@ -416,19 +416,20 @@ const KarkasTablePage = (() => {
     scrollProxyInner.style.width = table.offsetWidth + "px";
 
     // Bidirectional sync between proxy and wrapper
+    let scrollRaf = 0;
     scrollProxy.addEventListener("scroll", () => {
       if (syncing) return;
       syncing = true;
       wrap.scrollLeft = scrollProxy.scrollLeft;
-      syncFixedScroll();
       syncing = false;
+      if (!scrollRaf) { scrollRaf = requestAnimationFrame(() => { scrollRaf = 0; syncFixedScroll(); }); }
     });
     wrap.addEventListener("scroll", () => {
       if (syncing) return;
       syncing = true;
       scrollProxy.scrollLeft = wrap.scrollLeft;
-      syncFixedScroll();
       syncing = false;
+      if (!scrollRaf) { scrollRaf = requestAnimationFrame(() => { scrollRaf = 0; syncFixedScroll(); }); }
     });
 
     // Sentinel: triggers when scroll proxy crosses the topbar
@@ -453,8 +454,8 @@ const KarkasTablePage = (() => {
       syncing = true;
       wrap.scrollLeft = fixedScroll.scrollLeft;
       scrollProxy.scrollLeft = fixedScroll.scrollLeft;
-      syncFixedScroll();
       syncing = false;
+      if (!scrollRaf) { scrollRaf = requestAnimationFrame(() => { scrollRaf = 0; syncFixedScroll(); }); }
     });
 
     // Fixed header inside same container
@@ -462,6 +463,7 @@ const KarkasTablePage = (() => {
     fixedHeaderWrap.style.cssText = "overflow:hidden;";
     const cloneTable = document.createElement("table");
     cloneTable.className = table.className;
+    cloneTable.style.willChange = "transform";
     fixedHeaderWrap.appendChild(cloneTable);
     fixedContainer.appendChild(fixedHeaderWrap);
 
@@ -471,14 +473,15 @@ const KarkasTablePage = (() => {
     deptBar.style.cssText = `position:fixed;overflow:hidden;display:none;z-index:49;background:var(--bg);`;
     const deptCloneTable = document.createElement("table");
     deptCloneTable.className = table.className;
+    deptCloneTable.style.willChange = "transform";
     deptBar.appendChild(deptCloneTable);
     document.body.appendChild(deptBar);
 
     function syncFixedScroll() {
       if (!headerActive) return;
-      const sl = -wrap.scrollLeft + "px";
-      cloneTable.style.marginLeft = sl;
-      deptCloneTable.style.marginLeft = sl;
+      const tx = "translateX(" + -wrap.scrollLeft + "px)";
+      cloneTable.style.transform = tx;
+      deptCloneTable.style.transform = tx;
     }
 
     function activateHeader() {
@@ -504,7 +507,7 @@ const KarkasTablePage = (() => {
       fixedScroll.scrollLeft = wrap.scrollLeft;
       fixedContainer.style.left = wrapRect.left + "px";
       fixedContainer.style.width = wrap.clientWidth + "px";
-      cloneTable.style.marginLeft = -wrap.scrollLeft + "px";
+      cloneTable.style.transform = "translateX(" + -wrap.scrollLeft + "px)";
       fixedContainer.style.display = "";
 
       updateDeptRow();
@@ -563,7 +566,7 @@ const KarkasTablePage = (() => {
       deptBar.style.top = containerBottom + "px";
       deptBar.style.left = wrapRect.left + "px";
       deptBar.style.width = wrap.clientWidth + "px";
-      deptCloneTable.style.marginLeft = -wrap.scrollLeft + "px";
+      deptCloneTable.style.transform = "translateX(" + -wrap.scrollLeft + "px)";
       deptBar.style.display = "";
     }
 

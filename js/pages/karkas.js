@@ -63,32 +63,9 @@ const KarkasPage = (() => {
   let sSelectedFrom = null;
   let sSelectedTo = null;
 
-  // Sweep animation state
-  let sSweepFrame = null;
-  let sSweepDir = 'ltr';
-  let sSweepDone = false;
-  let sSweepT = 0;
-  const sSWEEP_DUR = 0.05;
-  let sRibbonSweep = new Map();
-  let _flowShapesCache = null;
 
   function sBezPt(y0, y1, t) {
     return (1-t)**3*y0 + 3*(1-t)**2*t*y0 + 3*(1-t)*t**2*y1 + t**3*y1;
-  }
-
-  function sBezierLength(x0, cx, x1, y0a, y0b, y1a, y1b) {
-    const N = 20;
-    let len = 0, px = x0, py = (y0a+y0b)/2;
-    for (let i = 1; i <= N; i++) {
-      const t = i/N;
-      const bx = x0 + (x1-x0)*t;
-      const byTop = (1-t)**3*y0a + 3*(1-t)**2*t*y0a + 3*(1-t)*t**2*y1a + t**3*y1a;
-      const byBot = (1-t)**3*y0b + 3*(1-t)**2*t*y0b + 3*(1-t)*t**2*y1b + t**3*y1b;
-      const by = (byTop+byBot)/2;
-      len += Math.hypot(bx-px, by-py);
-      px = bx; py = by;
-    }
-    return len;
   }
 
   // ═══════════════════════════════════════
@@ -699,8 +676,6 @@ const KarkasPage = (() => {
   function sHandleClick(type, key) {
     if (sSelected.type === type && sSelected.key === key) {
       sSelected = { type: null, key: null };
-      sSweepDone = true;
-      if (sSweepFrame) { cancelAnimationFrame(sSweepFrame); sSweepFrame = null; }
     } else {
       sSelected = { type, key };
     }
@@ -710,13 +685,15 @@ const KarkasPage = (() => {
       el.classList.toggle('active-leg', depts.has(el.dataset.dept));
     });
     sDraw();
-    if (sSelected.type) {
-      const dir = sSelected.type === 'grade' ? 'ltr' : 'rtl';
-      sStartSweepAnimation(dir, _flowShapesCache);
-    }
+  }
+
+  function sGetFlowConnected(flowKey) {
+    const [grade, dept] = flowKey.split('||');
+    return { grades: new Set([grade]), depts: new Set([dept]) };
   }
 
   function sGetConnected(type, key) {
+    if (type === 'flow') return sGetFlowConnected(key);
     const RAW = sGetRAW();
     const grades = new Set(), depts = new Set();
     RAW.forEach(r => {
@@ -819,35 +796,38 @@ const KarkasPage = (() => {
       const x0 = PAD_L + NODE_W, x1 = PAD_L + innerW - NODE_W, cx = (x0 + x1) / 2;
       const { r, g, b } = hexRgb(DEPT_COLOR[row.dept]);
       const isHl = !hasSel || (conn.grades.has(row.grade) && conn.depts.has(row.dept));
-      const alpha = isHl ? (hasSel ? 0.72 : 0.45) : 0.04;
-      const grad = ctx.createLinearGradient(x0, 0, x1, 0);
-      grad.addColorStop(0, 'rgba(160,160,160,' + (alpha * 0.55) + ')');
-      grad.addColorStop(0.42, 'rgba(' + r + ',' + g + ',' + b + ',' + (alpha * 0.35) + ')');
-      grad.addColorStop(1, 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')');
 
-      const rKey = row.grade + '||' + row.dept;
-      const rSweep = sRibbonSweep.get(rKey);
-      if (rSweep && isHl && rSweep.progress < 1) {
-        const clipX = sSweepDir === 'ltr' ? x0 + (x1-x0)*rSweep.progress : x1 - (x1-x0)*rSweep.progress;
-        ctx.save();
-        if (sSweepDir === 'ltr') { ctx.beginPath(); ctx.rect(0, 0, clipX, H); ctx.clip(); }
-        else { ctx.beginPath(); ctx.rect(clipX, 0, CW - clipX, H); ctx.clip(); }
-        ctx.beginPath(); ctx.moveTo(x0, y0a); ctx.bezierCurveTo(cx, y0a, cx, y1a, x1, y1a);
-        ctx.lineTo(x1, y1b); ctx.bezierCurveTo(cx, y1b, cx, y0b, x0, y0b); ctx.closePath();
-        ctx.fillStyle = grad; ctx.fill();
-        ctx.restore();
-      } else {
-        ctx.beginPath(); ctx.moveTo(x0, y0a); ctx.bezierCurveTo(cx, y0a, cx, y1a, x1, y1a);
-        ctx.lineTo(x1, y1b); ctx.bezierCurveTo(cx, y1b, cx, y0b, x0, y0b); ctx.closePath();
-        ctx.fillStyle = grad; ctx.fill();
-      }
-
-      flowShapes.push({ row, y0a, y0b, y1a, y1b, isHl, v, gradeTotals, deptTotals });
+      flowShapes.push({ row, y0a, y0b, y1a, y1b, x0, x1, cx, r, g, b, isHl, v, gradeTotals, deptTotals });
       gradeOffset[row.grade] += lhG;
       deptOffset[row.dept] += lhD;
     });
 
-    _flowShapesCache = flowShapes;
+    // Draw pass 1: dimmed ribbons (background)
+    flowShapes.forEach(s => {
+      if (s.isHl && hasSel) return;
+      const alpha = s.isHl ? 0.45 : 0.14;
+      const grad = ctx.createLinearGradient(s.x0, 0, s.x1, 0);
+      grad.addColorStop(0, 'rgba(160,160,160,' + (alpha * 0.55) + ')');
+      grad.addColorStop(0.42, 'rgba(' + s.r + ',' + s.g + ',' + s.b + ',' + (alpha * 0.35) + ')');
+      grad.addColorStop(1, 'rgba(' + s.r + ',' + s.g + ',' + s.b + ',' + alpha + ')');
+      ctx.beginPath(); ctx.moveTo(s.x0, s.y0a); ctx.bezierCurveTo(s.cx, s.y0a, s.cx, s.y1a, s.x1, s.y1a);
+      ctx.lineTo(s.x1, s.y1b); ctx.bezierCurveTo(s.cx, s.y1b, s.cx, s.y0b, s.x0, s.y0b); ctx.closePath();
+      ctx.fillStyle = grad; ctx.fill();
+    });
+    // Draw pass 2: highlighted ribbons (foreground)
+    flowShapes.forEach(s => {
+      if (!s.isHl || !hasSel) return;
+      const alpha = 0.72;
+      const grad = ctx.createLinearGradient(s.x0, 0, s.x1, 0);
+      grad.addColorStop(0, 'rgba(160,160,160,' + (alpha * 0.55) + ')');
+      grad.addColorStop(0.42, 'rgba(' + s.r + ',' + s.g + ',' + s.b + ',' + (alpha * 0.35) + ')');
+      grad.addColorStop(1, 'rgba(' + s.r + ',' + s.g + ',' + s.b + ',' + alpha + ')');
+      ctx.beginPath(); ctx.moveTo(s.x0, s.y0a); ctx.bezierCurveTo(s.cx, s.y0a, s.cx, s.y1a, s.x1, s.y1a);
+      ctx.lineTo(s.x1, s.y1b); ctx.bezierCurveTo(s.cx, s.y1b, s.cx, s.y0b, s.x0, s.y0b); ctx.closePath();
+      ctx.fillStyle = grad; ctx.fill();
+    });
+
+    sLayout.flowShapes = flowShapes;
 
     if (hasSel) {
       const x0 = PAD_L + NODE_W, x1 = PAD_L + innerW - NODE_W;
@@ -886,9 +866,10 @@ const KarkasPage = (() => {
 
         const mT = sBezPt(y0a, y1a, 0.5), mB = sBezPt(y0b, y1b, 0.5), mC = (mT+mB)/2, mH = mB - mT;
         const mx = (x0 + x1) / 2;
+        const mFontSz = mob ? 10 : 12;
         ctx.save();
-        if (mH >= LSUFFIX) { ctx.beginPath(); ctx.rect(x0 + innerW*0.25, mT-1, innerW*0.5, mH+2); ctx.clip(); }
-        ctx.font = 'bold ' + LSUFFIX + 'px "Plus Jakarta Sans", sans-serif';
+        if (mH >= mFontSz) { ctx.beginPath(); ctx.rect(x0 + innerW*0.25, mT-1, innerW*0.5, mH+2); ctx.clip(); }
+        ctx.font = 'bold ' + mFontSz + 'px "Plus Jakarta Sans", sans-serif';
         ctx.fillStyle = getCSSVar('--text');
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.fillText(valStr, mx, mC);
@@ -1190,89 +1171,74 @@ const KarkasPage = (() => {
     document.querySelector('.range-picker-popup')?.remove();
   }
 
-  // ═══════════════════════════════════════
-  //  SWEEP ANIMATION
-  // ═══════════════════════════════════════
-  function sStartSweepAnimation(dir, flowShapes) {
-    if (sSweepFrame) cancelAnimationFrame(sSweepFrame);
-    sSweepDir = dir || 'ltr';
-    sSweepDone = false;
-    sSweepT = 0;
-    sRibbonSweep = new Map();
-
-    if (!flowShapes || !sLayout.PAD_L) { sAnimateSweep(); return; }
-
-    const { PAD_L: pl, NODE_W: nw, innerW: iw } = sLayout;
-    const x0 = pl + nw, x1 = pl + iw - nw, cx = (x0 + x1) / 2;
-
-    const hlShapes = flowShapes.filter(s => s.isHl);
-    if (hlShapes.length === 0) { sSweepDone = true; sDraw(); return; }
-
-    const lengths = hlShapes.map(s => sBezierLength(x0, cx, x1, s.y0a, s.y0b, s.y1a, s.y1b));
-    const maxLen = Math.max(...lengths);
-
-    hlShapes.forEach((s, i) => {
-      const key = s.row.grade + '||' + s.row.dept;
-      const speed = maxLen / Math.max(lengths[i], 1);
-      sRibbonSweep.set(key, { progress: 0, speed });
-    });
-
-    sAnimateSweep();
-  }
-
-  function sAnimateSweep() {
-    sSweepT += sSWEEP_DUR;
-    if (sSweepT >= 1) {
-      sSweepT = 1;
-      sSweepDone = true;
-      sRibbonSweep.clear();
-      sDraw();
-      sSweepFrame = null;
-      return;
-    }
-
-    const segments = [];
-    for (let i = 0; i < 100; i++) {
-      const from = i * 0.01;
-      const to = (i + 1) * 0.01;
-      const speed = Math.max(0.01, Math.pow(1 - from, 0.15));
-      segments.push({ from, to, speed });
-    }
-    const totalTime = segments.reduce((s, sg) => s + (sg.to - sg.from) / sg.speed, 0);
-    const t = sSweepT * totalTime;
-    let easedT = 0, tAcc = 0;
-    for (const sg of segments) {
-      const segDur = (sg.to - sg.from) / sg.speed;
-      if (t <= tAcc + segDur) {
-        easedT = sg.from + (t - tAcc) * sg.speed;
-        break;
-      }
-      tAcc += segDur;
-      easedT = sg.to;
-    }
-    easedT = Math.min(1, easedT);
-
-    sRibbonSweep.forEach(rs => {
-      rs.progress = Math.pow(easedT, 1 / rs.speed);
-    });
-    sDraw();
-    sSweepFrame = requestAnimationFrame(sAnimateSweep);
-  }
 
   // ═══════════════════════════════════════
   //  CANVAS CLICK
   // ═══════════════════════════════════════
+  function sHitTest(canvas, mx, my) {
+    const { gradeY: gY, deptY: dY, PAD_L: pl, innerW: iw, NODE_W: nw, CW: cw, GRADES: G, activeDepts: AD, flowShapes } = sLayout;
+    if (!G) return false;
+    for (const g of G) { if (my >= gY[g] - 18 && my <= gY[g] + 18 && mx >= 0 && mx <= pl + nw + 50) return true; }
+    const xS = pl + iw;
+    for (const d of AD) { if (my >= dY[d] - 26 && my <= dY[d] + 30 && mx >= xS && mx <= cw) return true; }
+    if (flowShapes && flowShapes.length) {
+      const DPR = devicePixelRatio || 1;
+      const ctx = canvas.getContext('2d');
+      for (const s of flowShapes) {
+        ctx.beginPath();
+        ctx.moveTo(s.x0, s.y0a);
+        ctx.bezierCurveTo(s.cx, s.y0a, s.cx, s.y1a, s.x1, s.y1a);
+        ctx.lineTo(s.x1, s.y1b);
+        ctx.bezierCurveTo(s.cx, s.y1b, s.cx, s.y0b, s.x0, s.y0b);
+        ctx.closePath();
+        if (ctx.isPointInPath(mx * DPR, my * DPR)) return true;
+      }
+    }
+    return false;
+  }
+
   function initCanvasClick() {
     const canvas = document.getElementById('sCanvas');
     if (!canvas) return;
+    let cursorRaf = 0;
+    canvas.addEventListener('mousemove', e => {
+      if (cursorRaf) return;
+      cursorRaf = requestAnimationFrame(() => {
+        cursorRaf = 0;
+        const rect = canvas.getBoundingClientRect();
+        const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+        canvas.style.cursor = sHitTest(canvas, mx, my) ? 'pointer' : '';
+      });
+    }, { passive: true });
+    canvas.addEventListener('mouseleave', () => { canvas.style.cursor = ''; });
     canvas.addEventListener('click', e => {
       const rect = canvas.getBoundingClientRect();
       const mx = e.clientX - rect.left, my = e.clientY - rect.top;
-      const { gradeY: gY, deptY: dY, PAD_L: pl, innerW: iw, NODE_W: nw, CW: cw, GRADES: G, activeDepts: AD } = sLayout;
+      const { gradeY: gY, deptY: dY, PAD_L: pl, innerW: iw, NODE_W: nw, CW: cw, GRADES: G, activeDepts: AD, flowShapes } = sLayout;
       if (!G) return;
+      // Priority 1: grade nodes
       for (const g of G) { if (my >= gY[g] - 18 && my <= gY[g] + 18 && mx >= 0 && mx <= pl + nw + 50) { sHandleClick('grade', g); return; } }
+      // Priority 2: dept nodes
       const xS = pl + iw;
       for (const d of AD) { if (my >= dY[d] - 26 && my <= dY[d] + 30 && mx >= xS && mx <= cw) { sHandleClick('dept', d); return; } }
+      // Priority 3: ribbons (smallest value first)
+      if (flowShapes && flowShapes.length) {
+        const DPR = devicePixelRatio || 1;
+        const ctx = canvas.getContext('2d');
+        const sorted = [...flowShapes].sort((a, b) => a.v - b.v);
+        for (const s of sorted) {
+          ctx.beginPath();
+          ctx.moveTo(s.x0, s.y0a);
+          ctx.bezierCurveTo(s.cx, s.y0a, s.cx, s.y1a, s.x1, s.y1a);
+          ctx.lineTo(s.x1, s.y1b);
+          ctx.bezierCurveTo(s.cx, s.y1b, s.cx, s.y0b, s.x0, s.y0b);
+          ctx.closePath();
+          if (ctx.isPointInPath(mx * DPR, my * DPR)) {
+            sHandleClick('flow', s.row.grade + '||' + s.row.dept);
+            return;
+          }
+        }
+      }
       sSelected = { type: null, key: null };
       document.querySelectorAll('.s-leg').forEach(el => el.classList.remove('active-leg'));
       sDraw();

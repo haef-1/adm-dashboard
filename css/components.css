@@ -1263,7 +1263,7 @@
 }
 
 .s-chart-wrap { width: 100%; }
-.s-chart-wrap canvas { width: 100%; display: block; cursor: pointer; }
+.s-chart-wrap canvas { width: 100%; display: block; }
 
 .s-empty {
   padding: 32px 20px;
