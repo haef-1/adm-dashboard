@@ -1759,9 +1759,6 @@ const OverviewTablePage = (() => {
     `;
 
     wrap.classList.toggle("scrollable", rows.length > 7);
-    wrap.addEventListener("scroll", () => {
-      wrap.style.setProperty("--scroll-x", wrap.scrollLeft + "px");
-    });
     renderSmtRangeNav();
   }
 

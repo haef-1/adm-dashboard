@@ -420,7 +420,6 @@ const KarkasTablePage = (() => {
     function scheduleSync() {
       if (!scrollRaf) { scrollRaf = requestAnimationFrame(() => {
         scrollRaf = 0;
-        wrap.style.setProperty("--scroll-x", wrap.scrollLeft + "px");
         syncFixedScroll();
       }); }
     }

@@ -24,6 +24,7 @@ const App = (() => {
         if (s) {
           Auth.showApp();
           Auth.startIdleWatch();
+          showWelcome(s.user);
           boot().catch(err => console.error('Boot failed:', err));
         } else {
           Auth.stopIdleWatch();
@@ -47,6 +48,15 @@ const App = (() => {
     });
     Auth.startIdleWatch();
     await boot();
+  }
+
+  function showWelcome(user) {
+    const name = user.user_metadata?.full_name || user.email.split('@')[0];
+    const toast = document.getElementById('welcomeToast');
+    if (!toast) return;
+    toast.textContent = 'Selamat datang kembali, ' + name;
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 3000);
   }
 
   async function boot() {

@@ -13,7 +13,7 @@ const Auth = (() => {
   }
 
   function shouldRestoreSession() {
-    return localStorage.getItem('rememberMe') === '1' || sessionStorage.getItem('sessionActive') === '1';
+    return sessionStorage.getItem('sessionActive') === '1';
   }
 
   async function getUser() {
@@ -25,13 +25,11 @@ const Auth = (() => {
     const { data, error } = await getClient().auth.signInWithPassword({ email, password });
     if (error) throw error;
     if (remember) {
-      localStorage.setItem('rememberMe', '1');
       localStorage.setItem('savedCredentials', JSON.stringify({ email, password }));
     } else {
-      localStorage.removeItem('rememberMe');
       localStorage.removeItem('savedCredentials');
-      sessionStorage.setItem('sessionActive', '1');
     }
+    sessionStorage.setItem('sessionActive', '1');
     return data;
   }
 
@@ -42,7 +40,6 @@ const Auth = (() => {
   }
 
   async function signOut() {
-    localStorage.removeItem('rememberMe');
     sessionStorage.removeItem('sessionActive');
     _role = null;
     const { error } = await getClient().auth.signOut();
@@ -77,7 +74,11 @@ const Auth = (() => {
         if (emailInput) emailInput.value = cred.email || '';
         if (passInput) passInput.value = cred.password || '';
         if (rememberChk) rememberChk.checked = true;
-      } catch (_) {}
+      } catch (_) {
+        if (emailInput) emailInput.value = '';
+        if (passInput) passInput.value = '';
+        if (rememberChk) rememberChk.checked = false;
+      }
     } else {
       if (emailInput) emailInput.value = '';
       if (passInput) passInput.value = '';
@@ -153,7 +154,9 @@ const Auth = (() => {
         await signIn(emailInput.value, passInput.value, remember);
       } catch (err) {
         errorEl.style.color = 'var(--red)';
-        errorEl.textContent = err.message;
+        errorEl.textContent = err.message === 'Invalid login credentials'
+          ? 'Username/password salah'
+          : err.message;
         submitBtn.disabled = false;
         submitLabel.textContent = 'Sign In';
       }
@@ -176,7 +179,6 @@ const Auth = (() => {
     if (_idleTimer) clearTimeout(_idleTimer);
     _idleTimer = setTimeout(async () => {
       stopIdleWatch();
-      localStorage.removeItem('rememberMe');
       sessionStorage.removeItem('sessionActive');
       _role = null;
       await getClient().auth.signOut();

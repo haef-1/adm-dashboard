@@ -11,9 +11,9 @@
     <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script defer src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
     <script defer src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <link rel="stylesheet" href="css/base.css" />
-    <link rel="stylesheet" href="css/layout.css" />
-    <link rel="stylesheet" href="css/components.css" />
+    <link rel="stylesheet" href="css/base.css?v=1" />
+    <link rel="stylesheet" href="css/layout.css?v=1" />
+    <link rel="stylesheet" href="css/components.css?v=1" />
   </head>
   <body>
     <!-- ══════ LOGIN SCREEN ══════ -->
@@ -141,12 +141,15 @@
     <!-- SESSION EXPIRED MODAL -->
     <div class="session-modal-overlay" id="sessionModal">
       <div class="session-modal">
-        <div class="session-modal-icon">&#10060;</div>
+        <div class="session-modal-icon">&#10060;&#xFE0E;</div>
         <h3 class="session-modal-title">Session Expired</h3>
         <p class="session-modal-msg">Your session has expired due to inactivity.</p>
         <button class="session-modal-btn" id="sessionModalBtn">OK</button>
       </div>
     </div>
+
+    <!-- WELCOME TOAST -->
+    <div class="welcome-toast" id="welcomeToast"></div>
 
     <!-- IMPORT OVERLAY -->
     <div class="import-overlay" id="importOverlay">
@@ -165,26 +168,27 @@
     </div>
 
     <!-- ENGINE -->
-    <script defer src="js/engine/db.js"></script>
-    <script defer src="js/engine/auth.js"></script>
-    <script defer src="js/engine/transform.js"></script>
-    <script defer src="js/engine/kpi.js"></script>
-    <script defer src="js/engine/byproduct.js"></script>
-    <script defer src="js/engine/search.js"></script>
+    <script defer src="js/engine/db.js?v=1"></script>
+    <script defer src="js/engine/auth.js?v=1"></script>
+    <script defer src="js/engine/transform.js?v=1"></script>
+    <script defer src="js/engine/kpi.js?v=1"></script>
+    <script defer src="js/engine/byproduct.js?v=1"></script>
+    <script defer src="js/engine/search.js?v=1"></script>
 
     <!-- UI -->
-    <script defer src="js/ui/navbar.js"></script>
-    <script defer src="js/ui/datepicker.js"></script>
-    <script defer src="js/ui/charts.js"></script>
-    <script defer src="js/ui/import.js"></script>
+    <script defer src="js/ui/navbar.js?v=1"></script>
+    <script defer src="js/ui/datepicker.js?v=1"></script>
+    <script defer src="js/ui/charts.js?v=1"></script>
+    <script defer src="js/ui/import.js?v=1"></script>
+    <script defer src="js/ui/pull-refresh.js?v=1"></script>
 
     <!-- PAGES -->
-    <script defer src="js/pages/overview.js"></script>
-    <script defer src="js/pages/overview-table.js"></script>
-    <script defer src="js/pages/karkas.js"></script>
-    <script defer src="js/pages/karkas-table.js"></script>
+    <script defer src="js/pages/overview.js?v=1"></script>
+    <script defer src="js/pages/overview-table.js?v=1"></script>
+    <script defer src="js/pages/karkas.js?v=1"></script>
+    <script defer src="js/pages/karkas-table.js?v=1"></script>
 
     <!-- INIT -->
-    <script defer src="js/main.js"></script>
+    <script defer src="js/main.js?v=1"></script>
   </body>
 </html>

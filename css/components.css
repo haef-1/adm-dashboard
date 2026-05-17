@@ -1941,6 +1941,7 @@
 .session-modal-icon {
   font-size: 36px;
   margin-bottom: 12px;
+  color: #ef4444;
 }
 
 .session-modal-title {
@@ -2264,11 +2265,10 @@
 
 .smt-table th:first-child,
 .smt-table td:first-child {
-  position: relative;
+  position: sticky;
+  left: 0;
   z-index: 2;
   background: var(--surface);
-  transform: translateX(var(--scroll-x, 0px));
-  will-change: transform;
 }
 
 .smt-table thead th:first-child {
