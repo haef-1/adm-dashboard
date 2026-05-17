@@ -63,10 +63,12 @@
       pulling = false;
       if (indicator.classList.contains("ready")) {
         indicator.style.transform = "translateY(20px)";
-        let rot = 0;
-        spinner.style.setProperty("--ptr-progress", "324deg");
+        let rot = 0, fill = 72;
         function animateFill() {
           rot += 6;
+          if (fill < 324) fill += 4;
+          if (fill > 324) fill = 324;
+          spinner.style.setProperty("--ptr-progress", fill + "deg");
           spinner.style.transform = "rotate(" + rot + "deg)";
           if (indicator.classList.contains("refreshing")) requestAnimationFrame(animateFill);
         }
