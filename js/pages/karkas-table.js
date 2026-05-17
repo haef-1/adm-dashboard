@@ -479,9 +479,14 @@ const KarkasTablePage = (() => {
 
     function syncFixedScroll() {
       if (!headerActive) return;
-      const tx = "translateX(" + -wrap.scrollLeft + "px)";
+      const sl = wrap.scrollLeft;
+      const tx = "translateX(" + -sl + "px)";
       cloneTable.style.transform = tx;
       deptCloneTable.style.transform = tx;
+      const deptFirstTd = deptCloneTable.querySelector("td:first-child");
+      if (deptFirstTd) deptFirstTd.style.transform = "translateX(" + sl + "px)";
+      const headerFirstTh = cloneTable.querySelector("th:first-child");
+      if (headerFirstTh) headerFirstTh.style.transform = "translateX(" + sl + "px)";
     }
 
     function activateHeader() {
@@ -507,7 +512,10 @@ const KarkasTablePage = (() => {
       fixedScroll.scrollLeft = wrap.scrollLeft;
       fixedContainer.style.left = wrapRect.left + "px";
       fixedContainer.style.width = wrap.clientWidth + "px";
-      cloneTable.style.transform = "translateX(" + -wrap.scrollLeft + "px)";
+      const sl = wrap.scrollLeft;
+      cloneTable.style.transform = "translateX(" + -sl + "px)";
+      const headerFirstTh = cloneTable.querySelector("th:first-child");
+      if (headerFirstTh) headerFirstTh.style.transform = "translateX(" + sl + "px)";
       fixedContainer.style.display = "";
 
       updateDeptRow();
@@ -554,6 +562,7 @@ const KarkasTablePage = (() => {
           cloneCells[i].style.width = td.offsetWidth + "px";
           cloneCells[i].style.minWidth = td.offsetWidth + "px";
         });
+        cloneCells[0].style.background = DEPT_BG[dept] || "var(--bg)";
         const tbody = document.createElement("tbody");
         tbody.appendChild(cloneRow);
         deptCloneTable.innerHTML = "";
@@ -563,10 +572,13 @@ const KarkasTablePage = (() => {
       }
 
       const wrapRect = wrap.getBoundingClientRect();
+      const sl = wrap.scrollLeft;
       deptBar.style.top = containerBottom + "px";
       deptBar.style.left = wrapRect.left + "px";
       deptBar.style.width = wrap.clientWidth + "px";
-      deptCloneTable.style.transform = "translateX(" + -wrap.scrollLeft + "px)";
+      deptCloneTable.style.transform = "translateX(" + -sl + "px)";
+      const deptFirstTd = deptCloneTable.querySelector("td:first-child");
+      if (deptFirstTd) deptFirstTd.style.transform = "translateX(" + sl + "px)";
       deptBar.style.display = "";
     }
 

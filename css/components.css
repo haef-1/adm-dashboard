@@ -2401,5 +2401,12 @@
   background: var(--bg);
 }
 .krk-table thead th:first-child {
+  position: relative;
   z-index: 5;
+  will-change: transform;
+}
+.krk-fixed-dept td:first-child {
+  position: relative;
+  z-index: 2;
+  will-change: transform;
 }
