@@ -982,7 +982,8 @@ const KarkasPage = (() => {
     }
 
     if (period === 'daily') {
-      openDailyRangePicker(dates, MAX, selFrom, selTo, selItems, btnId, applyResult, resetResult);
+      const defaultCount = target === 'yield' ? 7 : 1;
+      openDailyRangePicker(dates, MAX, selFrom, selTo, selItems, btnId, applyResult, resetResult, defaultCount);
       return;
     }
 
@@ -1045,13 +1046,13 @@ const KarkasPage = (() => {
     setTimeout(() => document.addEventListener('click', _rangeDocListener), 0);
   }
 
-  function openDailyRangePicker(dates, MAX, selFrom, selTo, selItems, btnId, applyResult, resetResult) {
+  function openDailyRangePicker(dates, MAX, selFrom, selTo, selItems, btnId, applyResult, resetResult, defaultCount) {
     const availSet = new Set(dates);
     const allMonths = [...new Set(dates.map(d => d.slice(0, 7)))];
     let fromDate = null, toDate = null;
     if (selFrom && selTo) { fromDate = selFrom; toDate = selTo; }
     else if (selItems && selItems.length) { fromDate = selItems[0]; toDate = selItems[selItems.length - 1]; }
-    else { const range = dates.slice(-MAX); fromDate = range[0]; toDate = range[range.length - 1]; }
+    else { const range = dates.slice(-(defaultCount || MAX)); fromDate = range[0]; toDate = range[range.length - 1]; }
 
     let clickPhase = 0;
     let calMonth = (fromDate || dates[dates.length - 1]).slice(0, 7);
