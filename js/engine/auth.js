@@ -47,6 +47,7 @@ const Auth = (() => {
     _role = null;
     const { error } = await getClient().auth.signOut();
     if (error) throw error;
+    if (window.caches) await caches.keys().then(ks => Promise.all(ks.map(k => caches.delete(k))));
     location.reload();
   }
 
@@ -188,8 +189,9 @@ const Auth = (() => {
       const modal = document.getElementById('sessionModal');
       const btn = document.getElementById('sessionModalBtn');
       modal.classList.add('show');
-      btn.onclick = () => {
+      btn.onclick = async () => {
         modal.classList.remove('show');
+        if (window.caches) await caches.keys().then(ks => Promise.all(ks.map(k => caches.delete(k))));
         location.reload();
       };
     }, IDLE_TIMEOUT);
