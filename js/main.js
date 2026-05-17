@@ -24,7 +24,7 @@ const App = (() => {
         if (s) {
           Auth.showApp();
           Auth.startIdleWatch();
-          showWelcome(s.user);
+          showWelcome(s.user, false);
           boot().catch(err => console.error('Boot failed:', err));
         } else {
           Auth.stopIdleWatch();
@@ -36,6 +36,7 @@ const App = (() => {
 
     Auth.showApp();
     Auth.initLoginUI();
+    showWelcome(session.user, true);
     Auth.onAuthChange((s) => {
       if (s) {
         Auth.showApp();
@@ -50,11 +51,11 @@ const App = (() => {
     await boot();
   }
 
-  function showWelcome(user) {
+  function showWelcome(user, isReturning) {
     const name = user.user_metadata?.full_name || user.email.split('@')[0];
     const toast = document.getElementById('welcomeToast');
     if (!toast) return;
-    toast.textContent = 'Selamat datang kembali, ' + name;
+    toast.textContent = (isReturning ? 'welcome back, ' : 'welcome, ') + name;
     toast.classList.add('show');
     setTimeout(() => toast.classList.remove('show'), 3000);
   }

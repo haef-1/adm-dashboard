@@ -5,6 +5,7 @@
   let startY = 0;
   let pulling = false;
   let indicator = null;
+  let spinner = null;
 
   function getScrollContainer() {
     return document.querySelector(".page-content");
@@ -22,6 +23,7 @@
     if (!("ontouchstart" in window)) return;
 
     indicator = createIndicator();
+    spinner = indicator.querySelector(".ptr-spinner");
     const sc = getScrollContainer();
     if (!sc) return;
 
@@ -39,12 +41,19 @@
         pulling = false;
         indicator.style.transform = "translateY(-100%)";
         indicator.classList.remove("ready");
+        spinner.classList.remove("ptr-spinning");
         return;
       }
       const pull = Math.min(dy * 0.4, MAX_PULL);
       const progress = Math.min(pull / THRESHOLD, 1);
       indicator.style.transform = "translateY(" + (pull - 40) + "px)";
-      indicator.querySelector(".ptr-spinner").style.setProperty("--ptr-progress", (progress * 360) + "deg");
+      const fillDeg = Math.min(progress / 0.9, 1) * 324;
+      spinner.style.setProperty("--ptr-progress", fillDeg + "deg");
+      if (progress >= 0.9) {
+        spinner.classList.add("ptr-spinning");
+      } else {
+        spinner.classList.remove("ptr-spinning");
+      }
       indicator.classList.toggle("ready", pull >= THRESHOLD);
     }, { passive: true });
 
@@ -54,19 +63,11 @@
       if (indicator.classList.contains("ready")) {
         indicator.classList.add("refreshing");
         indicator.style.transform = "translateY(20px)";
-        const spinner = indicator.querySelector(".ptr-spinner");
-        let deg = 0;
-        function animateFill() {
-          deg += 4;
-          if (deg > 360) deg = 0;
-          spinner.style.setProperty("--ptr-progress", deg + "deg");
-          requestAnimationFrame(animateFill);
-        }
-        requestAnimationFrame(animateFill);
         setTimeout(() => location.reload(), 600);
       } else {
         indicator.style.transform = "translateY(-100%)";
-        indicator.querySelector(".ptr-spinner").style.setProperty("--ptr-progress", "0deg");
+        spinner.style.setProperty("--ptr-progress", "0deg");
+        spinner.classList.remove("ptr-spinning");
         indicator.classList.remove("ready");
       }
     });
