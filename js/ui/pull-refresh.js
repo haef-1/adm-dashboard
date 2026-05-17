@@ -50,7 +50,7 @@
       const fillDeg = Math.min(progress / 0.9, 1) * 324;
       spinner.style.setProperty("--ptr-progress", fillDeg + "deg");
       if (progress >= 0.9) {
-        const rotateDeg = Math.min((progress - 0.9) / 0.1, 1) * 180;
+        const rotateDeg = Math.min((progress - 0.9) / 0.1, 1) * 270;
         spinner.style.transform = "rotate(" + rotateDeg + "deg)";
       } else {
         spinner.style.transform = "";
@@ -63,8 +63,16 @@
       pulling = false;
       if (indicator.classList.contains("ready")) {
         spinner.style.transform = "";
-        indicator.classList.add("refreshing");
         indicator.style.transform = "translateY(20px)";
+        let deg = 0;
+        function animateFill() {
+          deg += 6;
+          if (deg > 324) deg -= 324;
+          spinner.style.setProperty("--ptr-progress", deg + "deg");
+          if (indicator.classList.contains("refreshing")) requestAnimationFrame(animateFill);
+        }
+        indicator.classList.add("refreshing");
+        requestAnimationFrame(animateFill);
         setTimeout(() => location.reload(), 600);
       } else {
         indicator.style.transform = "translateY(-100%)";
