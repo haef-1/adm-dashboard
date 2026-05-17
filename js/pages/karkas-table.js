@@ -441,7 +441,7 @@ const KarkasTablePage = (() => {
 
     // Single fixed container for scrollbar + header (no gap possible)
     const fixedContainer = document.createElement("div");
-    fixedContainer.style.cssText = `position:fixed;top:${scrollTop}px;display:none;z-index:50;background:var(--bg);box-shadow:0 2px 6px rgba(0,0,0,.08);`;
+    fixedContainer.style.cssText = `position:fixed;top:${scrollTop}px;display:none;z-index:50;background:var(--bg);`;
     document.body.appendChild(fixedContainer);
 
     // Fixed scroll proxy inside container
@@ -508,11 +508,20 @@ const KarkasTablePage = (() => {
       cloneTable.style.tableLayout = "fixed";
       cloneTable.style.width = table.offsetWidth + "px";
 
-      // Populate pinned header cell
+      // Populate pinned header cell as a real table th (identical look)
       const origFirstTh = origThs[0];
-      pinnedHeaderCell.textContent = origFirstTh.textContent;
-      pinnedHeaderCell.style.width = origFirstTh.offsetWidth + "px";
-      pinnedHeaderCell.style.height = origFirstTh.offsetHeight + "px";
+      const miniTable = document.createElement("table");
+      miniTable.className = table.className;
+      miniTable.style.cssText = "table-layout:fixed;width:" + origFirstTh.offsetWidth + "px;";
+      const miniThead = document.createElement("thead");
+      const miniTr = document.createElement("tr");
+      const miniTh = origFirstTh.cloneNode(true);
+      miniTh.style.width = origFirstTh.offsetWidth + "px";
+      miniTr.appendChild(miniTh);
+      miniThead.appendChild(miniTr);
+      miniTable.appendChild(miniThead);
+      pinnedHeaderCell.innerHTML = "";
+      pinnedHeaderCell.appendChild(miniTable);
 
       const wrapRect = wrap.getBoundingClientRect();
 
@@ -576,12 +585,23 @@ const KarkasTablePage = (() => {
         deptCloneTable.style.tableLayout = "fixed";
         deptCloneTable.style.width = table.offsetWidth + "px";
 
-        // Populate pinned dept cell
+        // Populate pinned dept cell as real table td (identical look)
         const firstTd = origCells[0];
-        pinnedDeptCell.innerHTML = firstTd.innerHTML;
-        pinnedDeptCell.style.width = firstTd.offsetWidth + "px";
+        const dMiniTable = document.createElement("table");
+        dMiniTable.className = table.className;
+        dMiniTable.style.cssText = "table-layout:fixed;width:" + firstTd.offsetWidth + "px;";
+        const dTbody = document.createElement("tbody");
+        const dRow = document.createElement("tr");
+        dRow.className = pinned.className;
+        dRow.style.background = DEPT_BG[dept] || "var(--bg)";
+        const dTd = firstTd.cloneNode(true);
+        dTd.style.width = firstTd.offsetWidth + "px";
+        dRow.appendChild(dTd);
+        dTbody.appendChild(dRow);
+        dMiniTable.appendChild(dTbody);
+        pinnedDeptCell.innerHTML = "";
+        pinnedDeptCell.appendChild(dMiniTable);
         pinnedDeptCell.style.height = pinned.offsetHeight + "px";
-        pinnedDeptCell.style.background = DEPT_BG[dept] || "var(--bg)";
       }
 
       const wrapRect = wrap.getBoundingClientRect();
