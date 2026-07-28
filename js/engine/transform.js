@@ -281,25 +281,41 @@ const Engine = (() => {
   }
 
   // ── Truck count per day for calendar month ──
-  function getTruckCalendar(ym) {
-    const days = {};
-    for (const dateStr of _allDates) {
-      if (!dateStr.startsWith(ym)) continue;
-      const dateRows = _rowsByDate.get(dateStr);
-      if (!dateRows) continue;
-      for (const r of dateRows) {
-        if (R_DEPT[r[0]] !== 'KARKAS' || R_PV[r[1]] !== 'AYAM BARU') continue;
-        if (!days[dateStr]) days[dateStr] = new Set();
-        days[dateStr].add(R_ORDER[r[2]]);
-      }
+  function _truckCount(dateStr) {
+    const dateRows = _rowsByDate.get(dateStr);
+    if (!dateRows) return 0;
+    const orders = new Set();
+    for (const r of dateRows) {
+      if (R_DEPT[r[0]] !== 'KARKAS' || R_PV[r[1]] !== 'AYAM BARU') continue;
+      orders.add(R_ORDER[r[2]]);
     }
+    return orders.size;
+  }
+
+  function getTruckCalendar(ym) {
+    // _allDates sudah terurut, jadi urutan key hasilnya ikut terurut.
     const result = {};
     let total = 0;
-    Object.keys(days).sort().forEach(d => {
-      result[d] = days[d].size;
-      total += days[d].size;
-    });
-    return { days: result, total };
+    for (const dateStr of _allDates) {
+      if (!dateStr.startsWith(ym)) continue;
+      const n = _truckCount(dateStr);
+      if (!n) continue;
+      result[dateStr] = n;
+      total += n;
+    }
+
+    // Hari produksi terakhir SEBELUM bulan ini. Dipakai sebagai pembanding
+    // warna tanggal 1 — tanpa ini indikator naik/turun mereset jadi netral
+    // di setiap awal bulan.
+    let prevCount = null;
+    for (let i = _allDates.length - 1; i >= 0; i--) {
+      const d = _allDates[i];
+      if (d >= ym + '-01') continue;
+      const n = _truckCount(d);
+      if (n) { prevCount = n; break; }
+    }
+
+    return { days: result, total, prevCount };
   }
 
   // ── Bahan distribution per dept per date ──

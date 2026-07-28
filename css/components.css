@@ -23,7 +23,9 @@
   border-bottom: none;
 }
 
-#sectionSearch {
+/* Search Material kini berbagi section dengan Trafic Bahan, jadi ruang bawah
+   untuk dropdown autocomplete dipasang di section gabungannya. */
+#sectionTrafficSearch {
   margin-bottom: 200px;
 }
 
@@ -218,6 +220,41 @@
   grid-template-columns: 300px 1fr;
 }
 
+/* Di atas 1020px proporsinya dikunci 30/70. Kalender ikut melar, tidak lagi
+   dipatok 300px — kalau tetap dipatok, porsinya menyusut terus di layar lebar
+   (cuma 16% di 1920px) karena semua tambahan ruang jatuh ke chart. */
+@media (min-width: 1021px) {
+  #sectionCalChart .section-split {
+    grid-template-columns: 3fr 7fr;
+  }
+  /* Isi yang lebar tidak boleh memaksa kolomnya melebihi jatahnya. */
+  #sectionCalChart .section-split > * {
+    min-width: 0;
+  }
+
+  /* Kolom kalender = 30% viewport, jadi lebar selnya ikut vw:
+       sel ≈ 4,29vw − 11px  (33px di 1021px → 71px di 1920px)
+     Label diskalakan dengan rasio yang sama seperti sekarang — value 40%
+     dari lebar sel, tanggal 23%, nama hari 26% — supaya proporsinya persis
+     seperti tampilan lama, cuma ikut membesar. Batas bawah clamp menjaga
+     ukurannya tidak pernah lebih kecil dari sekarang. */
+  #calPanel .cal-dow {
+    font-size: clamp(9px, 1.11vw - 2.9px, 18px);
+  }
+
+  #calPanel .cal-cell .cal-date {
+    font-size: clamp(8px, 0.99vw - 2.5px, 16px);
+    top: clamp(2px, 0.3vw, 6px);
+    right: clamp(4px, 0.45vw, 9px);
+  }
+
+  #calPanel .cal-cell .cal-val {
+    font-size: clamp(14px, 1.74vw - 4.5px, 28px);
+    bottom: clamp(3px, 0.35vw, 7px);
+    left: clamp(4px, 0.45vw, 9px);
+  }
+}
+
 .section-split > *:first-child {
   border-right: 1px solid var(--border-light);
 }
@@ -226,8 +263,45 @@
   padding: 16px 20px;
 }
 
-#sectionSearch .split-panel {
+#searchPanel {
   padding-bottom: 200px;
+}
+
+/* Panel grid harus boleh menyusut, kalau tidak isi yang lebar
+   (tabel & chart) memaksa kolomnya melar melebihi 50%. */
+#sectionTrafficSearch .section-split > * {
+  min-width: 0;
+}
+
+/* Judul berdiri sendiri di baris atas, filter turun ke baris bawah dan
+   rata kanan — bukan berdampingan dengan judul seperti panel lain. */
+#searchPanel .split-panel-header {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+
+#searchPanel .smt-header-controls {
+  justify-content: flex-end;
+}
+
+/* Di dalam panel selebar 50%, layout 1fr 2fr milik Search Material terlalu
+   sempit untuk 3 dropdown filter — jadi ditumpuk vertikal. */
+#searchPanel .search-layout {
+  grid-template-columns: 1fr;
+}
+
+#searchPanel .search-left {
+  padding-right: 0;
+  border-right: none;
+  border-bottom: 1px solid var(--border-light);
+  padding-bottom: 16px;
+  margin-bottom: 4px;
+}
+
+#searchPanel .search-right {
+  padding-left: 0;
+  padding-top: 12px;
 }
 
 .split-panel-header {
@@ -1777,8 +1851,14 @@
 
 /* Mobile: calendar dan chart stack vertikal */
 @media (max-width: 700px) {
-  #sectionCalChart .section-split {
+  #sectionCalChart .section-split,
+  #sectionTrafficSearch .section-split {
     grid-template-columns: 1fr;
+  }
+  /* Pemisah pindah dari kanan ke bawah saat sudah menumpuk. */
+  #sectionTrafficSearch .section-split > *:first-child {
+    border-right: none;
+    border-bottom: 1px solid var(--border-light);
   }
   #sectionCalChart .section-split > *:first-child {
     border-right: none;
@@ -1972,6 +2052,256 @@
 
 .session-modal-btn:hover {
   opacity: 0.9;
+}
+
+/* ═══════════════════════════════════════
+   WHAT'S NEW MODAL
+   ═══════════════════════════════════════ */
+/* Satu tempat untuk menyetel ketebalan hitamnya.
+   --whatsnew-scrim : selubung layar (modal & spotlight)
+   --whatsnew-card  : kartu kaca gelap; naikkan kalau teksnya kurang terbaca */
+:root {
+  --whatsnew-scrim: rgba(0, 0, 0, 0.16);
+  --whatsnew-card: rgba(0, 0, 0, 0.35);
+  --whatsnew-fg: #ffffff;
+  --whatsnew-fg-soft: rgba(255, 255, 255, 0.72);
+}
+
+.whatsnew-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--whatsnew-scrim);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 20000;
+  padding: 20px;
+  /* Tembus klik & scroll: halaman di belakang tetap bisa digulir selagi
+     popup terbuka. Konsekuensinya klik-latar-untuk-menutup tidak berfungsi,
+     jadi kartunya diberi tombol × tersendiri. */
+  pointer-events: none;
+}
+
+.whatsnew-overlay.show {
+  display: flex;
+}
+
+.whatsnew-modal {
+  position: relative;
+  pointer-events: auto;
+  background: var(--whatsnew-card);
+  /* Blur bikin isi dashboard di belakang tidak mengganggu bacaan, dan
+     border tipis memberi tepi kartu supaya tidak lebur dengan selubung. */
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: var(--radius-lg);
+  padding: 26px 24px 20px;
+  width: 100%;
+  max-width: 420px;
+  max-height: 85vh;
+  overflow-y: auto;
+  box-shadow: var(--shadow-lg);
+  animation: whatsnewIn 0.28s ease;
+}
+
+@keyframes whatsnewIn {
+  from { opacity: 0; transform: translateY(12px) scale(0.98); }
+  to   { opacity: 1; transform: none; }
+}
+
+.whatsnew-close {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--whatsnew-fg-soft);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.whatsnew-close:hover {
+  background: rgba(255, 255, 255, 0.14);
+  color: var(--whatsnew-fg);
+}
+
+.whatsnew-header {
+  text-align: center;
+  margin-bottom: 18px;
+}
+
+/* Semua teks dibalik jadi terang — di atas kartu gelap, warna teks bawaan
+   dashboard (abu tua) praktis tidak terbaca. */
+.whatsnew-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  color: var(--blue-mid);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+
+.whatsnew-title {
+  font-size: 19px;
+  font-weight: 800;
+  color: var(--whatsnew-fg);
+  margin-bottom: 5px;
+}
+
+.whatsnew-subtitle {
+  font-size: 12.5px;
+  color: var(--whatsnew-fg-soft);
+}
+
+.whatsnew-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 20px;
+}
+
+.whatsnew-item {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 11px 10px;
+  border-radius: var(--radius-sm);
+  transition: background var(--transition);
+}
+
+.whatsnew-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.whatsnew-item-icon {
+  font-size: 18px;
+  line-height: 1.3;
+  flex-shrink: 0;
+}
+
+.whatsnew-item-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--whatsnew-fg);
+  margin-bottom: 2px;
+}
+
+.whatsnew-item-desc {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--whatsnew-fg-soft);
+}
+
+.whatsnew-btn {
+  width: 100%;
+  padding: 11px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--blue);
+  color: #fff;
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity var(--transition);
+}
+
+.whatsnew-btn:hover {
+  opacity: 0.9;
+}
+
+@media (max-width: 600px) {
+  .whatsnew-modal {
+    padding: 22px 18px 18px;
+  }
+  .whatsnew-item {
+    padding: 10px 6px;
+    gap: 10px;
+  }
+}
+
+/* ── Spotlight ── */
+.whatsnew-spotlight {
+  position: fixed;
+  inset: 0;
+  z-index: 19900;
+  display: none;
+  /* Lapisan ini tembus klik; hanya caption-nya yang menangkap klik, jadi
+     panel yang disorot tetap bisa dicoba langsung oleh pengguna. */
+  pointer-events: none;
+}
+
+.whatsnew-spotlight.show {
+  display: block;
+}
+
+/* Lubang transparan: seluruh sisa layar digelapkan lewat box-shadow
+   bersebaran sangat besar, bukan empat panel penutup yang dihitung manual. */
+.whatsnew-spot-hole {
+  position: fixed;
+  border-radius: var(--radius-lg);
+  box-shadow: 0 0 0 9999px var(--whatsnew-scrim);
+  transition: all 0.25s ease;
+}
+
+/* Disamakan dengan kartu modal — langkah 1 dan 2 dari alur yang sama
+   tidak boleh beda gaya. */
+.whatsnew-spot-caption {
+  position: fixed;
+  max-width: 320px;
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  background: var(--whatsnew-card);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: var(--shadow-lg);
+  pointer-events: auto;
+  animation: whatsnewIn 0.28s ease;
+}
+
+.whatsnew-spot-text {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--whatsnew-fg-soft);
+  margin-bottom: 10px;
+}
+
+.whatsnew-spot-btn {
+  padding: 7px 20px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--blue);
+  color: #fff;
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity var(--transition);
+}
+
+.whatsnew-spot-btn:hover {
+  opacity: 0.9;
+}
+
+@media (max-width: 600px) {
+  .whatsnew-spot-caption {
+    max-width: calc(100vw - 24px);
+  }
 }
 
 .login-btn {
@@ -2422,11 +2752,22 @@
 /* ═══════════════════════════════════════
    TRAFIC BAHAN PER JAM (TTA)
    ═══════════════════════════════════════ */
+/* Judul berdiri sendiri di baris atas, toggle + tanggal turun ke baris bawah
+   dan rata kanan — sama seperti panel Search Material di sebelahnya. */
+#trafficPanel .split-panel-header {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+
+/* nowrap menjaga toggle dan navigasi tanggal tetap berdampingan di semua
+   ukuran layar, tidak pernah menumpuk. */
 .traffic-header-controls {
   display: flex;
   align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: nowrap;
 }
 
 .traffic-summary {
@@ -2455,10 +2796,8 @@
 }
 
 @media (max-width: 860px) {
-  .traffic-header-controls {
-    width: 100%;
-    justify-content: space-between;
-  }
+  /* Susunan bertingkat + rata kanan sudah berlaku di semua lebar, jadi di
+     sini cukup merapatkan jarak dan mengecilkan teks catatan. */
   .traffic-summary {
     padding-bottom: 8px;
   }

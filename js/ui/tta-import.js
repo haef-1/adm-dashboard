@@ -156,6 +156,11 @@ const TTAImportUI = (() => {
         return;
       }
 
+      // Ringkasan trafic per jam ikut diperbarui untuk tanggal yang baru masuk,
+      // supaya chart Overview tidak perlu membangun ulang dari data mentah.
+      showOverlay('MEMPERBARUI RINGKASAN...');
+      await TTATraffic.applyImportedRows(indexedRows);
+
       hideOverlay();
 
       const sortedDates = result.dates.slice().sort();

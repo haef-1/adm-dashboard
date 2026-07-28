@@ -25,7 +25,21 @@ const App = (() => {
           Auth.showApp();
           Auth.startIdleWatch();
           showWelcome(s.user, false);
-          boot().catch(err => console.error('Boot failed:', err));
+          // Popup ditampilkan SETELAH data selesai dimuat, bukan sebelumnya.
+          // Kalau dibalik, modal (z-index 20000) menutupi overlay loading
+          // (10000), jadi seolah pemuatan data berhenti sampai popup ditutup.
+          // Hanya di jalur ini — sesi yang dipulihkan saat refresh tidak
+          // pernah sampai ke sini, jadi popup tidak muncul tiap reload.
+          boot()
+            .then(() => {
+              // Popup hiasan tidak boleh menggagalkan apa pun.
+              try {
+                WhatsNew.maybeShow();
+              } catch (err) {
+                console.warn('[WhatsNew] gagal ditampilkan:', err);
+              }
+            })
+            .catch(err => console.error('Boot failed:', err));
         } else {
           Auth.stopIdleWatch();
           Auth.showLogin();
@@ -134,6 +148,19 @@ const App = (() => {
     _bgRunning = false;
     hideBgLoader();
     console.log('[BG] Background load complete. Total appended: ' + allRows.length + ' rows');
+
+    // Halaman sudah dirender saat baru bulan terbaru yang tersedia, jadi
+    // kontrol yang bergantung pada daftar bulan masih memakai data lama —
+    // tombol ‹ di Truk Kalender misalnya, ikut mati karena mengira datanya
+    // cuma satu bulan. Render ulang halaman yang sedang dibuka supaya
+    // seluruh bulan yang baru masuk langsung terpakai.
+    if (allRows.length) {
+      try {
+        Navbar.navigateTo(location.hash.slice(1) || 'overview');
+      } catch (err) {
+        console.warn('[BG] Gagal render ulang setelah background load:', err);
+      }
+    }
   }
 
   function showSeedOverlay(text) {

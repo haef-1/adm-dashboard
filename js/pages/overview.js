@@ -27,11 +27,13 @@ const OverviewPage = (() => {
   // ── Trafic bahan per jam (TTA) ──
   let trafficDate = null;
   let trafficMetric = "brd";
-  let trafficMonths = [];
-  let trafficDatesByMonth = {};
+  let trafficDays = {}; // 'YYYY-MM-DD' -> [[24 ekor], [24 kg]]
+  let trafficDates = []; // tanggal tersedia, terurut
   let _trafficChart = null;
   let _trafficNav = null;
-  let _trafficBusy = false;
+  let _trafficActive = -1; // batang yang sedang ditunjuk (-1 = tidak ada)
+  let _trafficPinned = false; // true kalau dikunci lewat klik
+  let _trafficDefault = -1; // jam terpadat — posisi label saat tidak di-hover
 
   // ── Main render ──
   function render(container) {
@@ -80,34 +82,40 @@ const OverviewPage = (() => {
         </div>
       </div>
 
-      <!-- SECTION 3: Trafic Bahan per Jam (data TTA) -->
-      <div class="section" id="sectionTraffic">
-        <div class="split-panel" id="trafficPanel">
-          <div class="split-panel-header">
-            <div class="split-panel-title">Trafic Bahan Karkas</div>
-            <div class="traffic-header-controls">
-              <div class="toggle-group" id="trafficToggle">
-                <button class="toggle-btn active" data-metric="brd">BRD</button>
-                <button class="toggle-btn" data-metric="kg">KG</button>
+      <!-- SECTION 3: Trafic Bahan (kiri) + Search Material (kanan), 50/50 -->
+      <div class="section" id="sectionTrafficSearch">
+        <div class="section-split">
+          <!-- Kiri: Trafic Bahan per Jam (data TTA) -->
+          <div class="split-panel" id="trafficPanel">
+            <!-- Pembungkus isi. Panel-nya sendiri teregang mengikuti tinggi
+                 Search Material di sebelahnya, jadi spotlight What's New
+                 menyorot elemen ini supaya tidak ikut menutupi ruang kosong
+                 di bawah grafik. -->
+            <div id="trafficBody">
+              <div class="split-panel-header">
+                <div class="split-panel-title">Trafic Bahan Karkas</div>
+                <div class="traffic-header-controls">
+                  <div class="toggle-group" id="trafficToggle">
+                    <button class="toggle-btn active" data-metric="brd">BRD</button>
+                    <button class="toggle-btn" data-metric="kg">KG</button>
+                  </div>
+                  <div id="trafficDateNav"></div>
+                </div>
               </div>
-              <div id="trafficDateNav"></div>
+              <div class="traffic-summary" id="trafficSummary"></div>
+              <div class="chart-wrap" id="trafficWrap" style="height:220px;position:relative;">
+                <canvas id="trafficChart"></canvas>
+              </div>
             </div>
           </div>
-          <div class="traffic-summary" id="trafficSummary"></div>
-          <div class="chart-wrap" id="trafficWrap" style="height:220px;position:relative;">
-            <canvas id="trafficChart"></canvas>
+          <!-- Kanan: Search Material -->
+          <div class="split-panel" id="searchPanel">
+            <div class="split-panel-header">
+              <div class="split-panel-title">Search Material</div>
+              <div class="smt-header-controls" id="smtHeaderControls"></div>
+            </div>
+            <div id="searchContainer"></div>
           </div>
-        </div>
-      </div>
-
-      <!-- SECTION 4: Search Material -->
-      <div class="section" id="sectionSearch">
-        <div class="split-panel" id="searchPanel">
-          <div class="split-panel-header">
-            <div class="split-panel-title">Search Material</div>
-            <div class="smt-header-controls" id="smtHeaderControls"></div>
-          </div>
-          <div id="searchContainer"></div>
         </div>
       </div>
     `;
@@ -300,11 +308,16 @@ const OverviewPage = (() => {
     }
 
     // Day cells
+    // Pembanding warna adalah hari PRODUKSI terakhir, bukan tanggal kalender
+    // sebelumnya. Hari libur dilewati (bukan dihitung nol, yang bikin hari
+    // sesudahnya selalu hijau), dan disemai dari bulan sebelumnya supaya
+    // tanggal 1 tidak selalu netral.
+    let lastCount = calData.prevCount ?? null;
     for (let d = 1; d <= daysInMonth; d++) {
       const dateStr = calMonth + "-" + String(d).padStart(2, "0");
-      const prevDateStr = calMonth + "-" + String(d - 1).padStart(2, "0");
       const count = calData.days[dateStr] || 0;
-      const prevCount = d > 1 ? (calData.days[prevDateStr] || 0) : null;
+      const prevCount = lastCount;
+      if (count) lastCount = count;
       const el = document.createElement("div");
       el.className = "cal-cell" + (count ? " has-data" : "");
 
@@ -1124,7 +1137,14 @@ const OverviewPage = (() => {
   // Aturan: pv 1A01+1A05, material KARKAS, tanggal = Proses Order Date,
   // jam = Create Time.
   // ══════════════════════════════════════
-  const TRAFFIC_PV = ["1A01", "1A05"];
+  // Aturan filter (pv 1A01+1A05, material KARKAS) ada di TTATraffic —
+  // dipakai bareng oleh chart ini dan pipeline import.
+
+  // Hari produksi mulai jam 07:00 dan berlanjut melewati tengah malam. Baris
+  // jam 00–06 dengan Proses Order Date yang sama adalah ekor shift itu, jadi
+  // di sumbu X ditaruh setelah jam 23 — bukan di awal.
+  // Agregasi tetap memakai jam asli 0–23; urutan ini hanya untuk tampilan.
+  const TRAFFIC_HOURS = Array.from({ length: 24 }, (_, i) => (i + 7) % 24);
 
   function initTrafficChart() {
     const toggle = document.getElementById("trafficToggle");
@@ -1144,6 +1164,17 @@ const OverviewPage = (() => {
       onPrev: () => stepTrafficDate(-1),
       onNext: () => stepTrafficDate(1),
     });
+    // Kursor keluar dari chart → label hilang, kecuali sedang dikunci lewat
+    // klik. Dipasang sekali di sini karena canvas-nya baru dibuat ulang saat
+    // halaman di-render ulang, jadi listener tidak menumpuk.
+    document
+      .getElementById("trafficChart")
+      ?.addEventListener("mouseleave", () => {
+        if (_trafficPinned || _trafficActive === _trafficDefault) return;
+        _trafficActive = _trafficDefault;
+        _trafficChart?.draw();
+      });
+
     document.getElementById("trafficDateNav")?.appendChild(nav.el);
     _trafficNav = nav;
     nav.setLabel("memuat…");
@@ -1155,105 +1186,40 @@ const OverviewPage = (() => {
 
   async function loadTrafficInitial() {
     try {
-      trafficMonths = await TTADB.ensureMonths();
-      if (!trafficMonths.length) {
+      // Satu request ±45 KB berisi SEMUA tanggal — tidak ada lagi unduh per
+      // bulan, jadi tombol ‹ › langsung tanpa menunggu jaringan.
+      trafficDays = await TTATraffic.getDays((i, n, ym) => {
+        _trafficNav?.setLabel(
+          "menyiapkan " + KPI.formatMonthYear(ym) + " (" + i + "/" + n + ")…",
+        );
+      });
+      trafficDates = Object.keys(trafficDays).sort();
+
+      if (!trafficDates.length) {
         showTrafficEmpty("Belum ada data TTA — import dulu file TTA-nya");
         return;
       }
       // Pertahankan tanggal yang sedang dilihat kalau halaman di-render ulang.
-      const ym = trafficDate
-        ? trafficDate.slice(0, 7)
-        : trafficMonths[trafficMonths.length - 1];
-      const dates = await ensureTrafficMonth(ym);
-      if (!dates.length) {
-        showTrafficEmpty("Belum ada data TTA di " + KPI.formatMonthYear(ym));
-        return;
-      }
-      if (!trafficDate || !dates.includes(trafficDate)) {
-        trafficDate = dates[dates.length - 1];
+      if (!trafficDate || !trafficDays[trafficDate]) {
+        trafficDate = trafficDates[trafficDates.length - 1];
       }
       renderTrafficChart();
     } catch (err) {
-      console.error("[Traffic] gagal memuat data TTA:", err);
+      console.error("[Traffic] gagal memuat ringkasan TTA:", err);
       showTrafficEmpty("Gagal memuat data TTA");
     }
   }
 
-  // Ambil satu bulan (dari cache kalau sudah pernah), lalu catat tanggalnya.
-  async function ensureTrafficMonth(ym) {
-    await TTADB.ensureMonth(ym);
-    if (!trafficDatesByMonth[ym]) {
-      trafficDatesByMonth[ym] = TTAEngine.getAllDates().filter((d) =>
-        d.startsWith(ym),
-      );
-    }
-    return trafficDatesByMonth[ym];
+  function stepTrafficDate(dir) {
+    const next = trafficDates[trafficDates.indexOf(trafficDate) + dir];
+    if (!next) return;
+    trafficDate = next;
+    renderTrafficChart();
   }
 
-  async function stepTrafficDate(dir) {
-    if (_trafficBusy || !trafficDate) return;
-
-    const ym = trafficDate.slice(0, 7);
-    const dates = trafficDatesByMonth[ym] || [];
-    const next = dates[dates.indexOf(trafficDate) + dir];
-    if (next) {
-      trafficDate = next;
-      renderTrafficChart();
-      return;
-    }
-
-    // Sudah di ujung bulan — ambil bulan sebelah.
-    const nextYm = trafficMonths[trafficMonths.indexOf(ym) + dir];
-    if (!nextYm) return;
-
-    _trafficBusy = true;
-    _trafficNav?.setLabel("memuat " + KPI.formatMonthYear(nextYm) + "…");
-    try {
-      const nd = await ensureTrafficMonth(nextYm);
-      if (nd.length) trafficDate = dir < 0 ? nd[nd.length - 1] : nd[0];
-    } catch (err) {
-      console.error("[Traffic] gagal memuat bulan " + nextYm + ":", err);
-    } finally {
-      _trafficBusy = false;
-      renderTrafficChart();
-    }
-  }
-
-  // Index kamus yang lolos filter — dihitung sekali per render, bukan per baris.
-  function trafficFilterSets() {
-    const L = TTAEngine.getLookups();
-    const pvOk = new Set();
-    (L.pv || []).forEach((v, i) => {
-      if (TRAFFIC_PV.includes(v)) pvOk.add(i);
-    });
-    const mdOk = new Set();
-    (L.md || []).forEach((v, i) => {
-      if (String(v).startsWith("KARKAS")) mdOk.add(i);
-    });
-    return { pvOk, mdOk };
-  }
-
-  // Jumlahkan ke 24 ember jam. Baris mentah dibaca langsung (tanpa decode
-  // ke object) supaya tetap ringan walau sebulan belasan ribu baris.
-  function trafficBuckets(dates, sets) {
-    const F = TTAEngine.F;
-    const L = TTAEngine.getLookups();
-    const total = new Array(24).fill(0);
-    const byDept = Array.from({ length: 24 }, () => ({}));
-
-    for (const d of dates) {
-      const rows = TTAEngine.getRowsForDates([d]);
-      for (let i = 0; i < rows.length; i++) {
-        const r = rows[i];
-        if (!sets.pvOk.has(r[F.PV]) || !sets.mdOk.has(r[F.MD])) continue;
-        const h = r[F.HOUR];
-        const v = trafficMetric === "kg" ? r[F.KG] : r[F.EKOR];
-        total[h] += v;
-        const dept = r[F.TUJUAN] === -1 ? "—" : L.dept[r[F.TUJUAN]] || "—";
-        byDept[h][dept] = (byDept[h][dept] || 0) + v;
-      }
-    }
-    return { total, byDept };
+  // Ringkasan menyimpan dua metrik berdampingan: index 0 ekor, 1 kg.
+  function trafficMetricIdx() {
+    return trafficMetric === "kg" ? 1 : 0;
   }
 
   function peakHour(total) {
@@ -1268,27 +1234,85 @@ const OverviewPage = (() => {
     return (h < 10 ? "0" : "") + h;
   }
 
+  // Nilai penuh dengan pemisah ribuan — sengaja bukan KPI.fmtShort, karena
+  // label ini harus menunjukkan angka asli, bukan singkatan "6,3K".
+  function trafficFmtFull(v) {
+    return Math.round(v).toLocaleString("id-ID");
+  }
+
+  // Pengganti tooltip: label kecil di atas area chart, disambung ke batang
+  // yang di-hover/klik lewat garis putus-putus vertikal. Labelnya digambar di
+  // strip padding atas (lihat layout.padding.top) supaya tidak menimpa batang.
+  const LABEL_H = 21;
+  const LABEL_GAP = 5;
+
+  const trafficMarkerPlugin = {
+    id: "trafficMarker",
+    afterDatasetsDraw(chart) {
+      const i = _trafficActive;
+      if (i < 0) return;
+
+      const bar = chart.getDatasetMeta(1).data[i];
+      if (!bar) return;
+
+      const ctx = chart.ctx;
+      const area = chart.chartArea;
+      const value = chart.data.datasets[1].data[i] || 0;
+      const text =
+        trafficFmtFull(value) + " " + (trafficMetric === "kg" ? "kg" : "ekor");
+
+      ctx.save();
+      ctx.font = "700 11px 'JetBrains Mono'";
+
+      const tw = ctx.measureText(text).width;
+      const by = area.top - LABEL_H - LABEL_GAP;
+      // Jaga label tetap di dalam area walau batangnya di tepi kiri/kanan.
+      const cx = Math.max(
+        area.left + tw / 2,
+        Math.min(bar.x, area.right - tw / 2),
+      );
+
+      ctx.beginPath();
+      ctx.setLineDash([3, 3]);
+      ctx.strokeStyle = "rgba(59,125,221,0.6)";
+      ctx.lineWidth = 1;
+      ctx.moveTo(bar.x, by + LABEL_H);
+      ctx.lineTo(bar.x, bar.y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Tanpa kotak latar — teks abu-abu gelap langsung di atas background.
+      ctx.fillStyle = "#4a4f6a";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(text, cx, by + LABEL_H / 2 + 0.5);
+      ctx.restore();
+    },
+  };
+
   function renderTrafficChart() {
     if (!trafficDate) return;
 
-    const sets = trafficFilterSets();
-    const day = trafficBuckets([trafficDate], sets);
+    const mi = trafficMetricIdx();
+    const day = { total: trafficDays[trafficDate]?.[mi] || new Array(24).fill(0) };
 
+    // Rata-rata bulan berjalan sebagai pembanding.
     const ym = trafficDate.slice(0, 7);
-    const monthDates = trafficDatesByMonth[ym] || [];
-    const month = trafficBuckets(monthDates, sets);
-    const avg = monthDates.length
-      ? month.total.map((v) => v / monthDates.length)
-      : new Array(24).fill(0);
+    const monthDates = trafficDates.filter((d) => d.startsWith(ym));
+    const avg = new Array(24).fill(0);
+    if (monthDates.length) {
+      for (const d of monthDates) {
+        const rec = trafficDays[d]?.[mi];
+        if (rec) for (let h = 0; h < 24; h++) avg[h] += rec[h];
+      }
+      for (let h = 0; h < 24; h++) avg[h] /= monthDates.length;
+    }
 
     // ── Navigasi tanggal ──
-    const idx = monthDates.indexOf(trafficDate);
-    const mIdx = trafficMonths.indexOf(ym);
+    const idx = trafficDates.indexOf(trafficDate);
     _trafficNav?.setLabel(KPI.formatDate(trafficDate));
-    _trafficNav?.setPrevEnabled(idx > 0 || mIdx > 0);
-    _trafficNav?.setNextEnabled(
-      idx < monthDates.length - 1 || mIdx < trafficMonths.length - 1,
-    );
+    _trafficNav?.setPrevEnabled(idx > 0);
+    _trafficNav?.setNextEnabled(idx >= 0 && idx < trafficDates.length - 1);
 
     renderTrafficSummary(day, ym);
     drawTrafficChart(day, avg);
@@ -1314,7 +1338,7 @@ const OverviewPage = (() => {
         : "";
 
     el.innerHTML =
-      `<span class="traffic-peak">Paling ramai jam ${pad2h(peak)}:00</span>` +
+      `<span class="traffic-peak">Paling padat jam ${pad2h(peak)}:00</span>` +
       `<span class="traffic-total">${KPI.fmtShort(sum)} ${unit}</span>` +
       `<span class="traffic-note">· garis putus-putus = rata-rata ${KPI.formatMonthYear(ym)}</span>` +
       sparse;
@@ -1341,37 +1365,45 @@ const OverviewPage = (() => {
       _trafficChart = null;
     }
 
-    const unit = trafficMetric === "kg" ? "kg" : "ekor";
     const peak = peakHour(day.total);
+
+    // Tanpa hover pun label sudah menempel di jam terpadat, dan ke sinilah
+    // label kembali setiap kursor meninggalkan batang.
+    _trafficDefault = peak >= 0 ? TRAFFIC_HOURS.indexOf(peak) : -1;
+    if (!_trafficPinned) _trafficActive = _trafficDefault;
 
     _trafficChart = new Chart(ctx, {
       type: "bar",
       data: {
-        labels: day.total.map((_, h) => pad2h(h)),
+        labels: TRAFFIC_HOURS.map(pad2h),
         datasets: [
           {
             // order lebih kecil digambar lebih dulu → garis berada di belakang bar
             type: "line",
             label: "Rata-rata",
-            data: avg,
+            data: TRAFFIC_HOURS.map((h) => avg[h]),
             order: 0,
             borderColor: "rgba(107,112,148,0.5)",
             borderWidth: 1.5,
             borderDash: [4, 3],
             pointRadius: 0,
             pointHitRadius: 0,
+            // Tanpa ini Chart.js memunculkan bulatan abu-abu di garis rata-rata
+            // setiap kali di-hover (pointHoverRadius bawaannya 4).
+            pointHoverRadius: 0,
+            pointHoverBorderWidth: 0,
             tension: 0.35,
             fill: false,
           },
           {
             type: "bar",
             label: "Hari ini",
-            data: day.total,
+            data: TRAFFIC_HOURS.map((h) => day.total[h]),
             order: 1,
             // Canvas tidak bisa membaca var(--…), jadi nilai warnanya ditulis
             // langsung: --blue untuk jam puncak, --cal-2 untuk sisanya.
-            backgroundColor: day.total.map((v, h) =>
-              v > 0 && h === peak ? "#3b7ddd" : "#C0D9F5",
+            backgroundColor: TRAFFIC_HOURS.map((h) =>
+              day.total[h] > 0 && h === peak ? "#3b7ddd" : "#C0D9F5",
             ),
             borderRadius: 3,
             borderSkipped: false,
@@ -1380,37 +1412,43 @@ const OverviewPage = (() => {
           },
         ],
       },
+      plugins: [trafficMarkerPlugin],
       options: {
         responsive: true,
         maintainAspectRatio: false,
         animation: { duration: 500, easing: "easeInOutQuart" },
+        // Batang tetap tumbuh 500ms saat pertama muncul, tapi perubahan warna
+        // saat kursor menyapu antar batang harus cepat — 500ms terasa lamban.
+        animations: { colors: { duration: 110, easing: "linear" } },
         interaction: { mode: "index", intersect: false },
+        // Ruang di atas plot untuk label penunjuk.
+        layout: { padding: { top: LABEL_H + LABEL_GAP + 2 } },
+        onHover: (_e, els, chart) => {
+          if (_trafficPinned) return;
+          // Di luar batang label balik ke jam terpadat, bukan menghilang.
+          const i = els.length ? els[0].index : _trafficDefault;
+          if (i !== _trafficActive) {
+            _trafficActive = i;
+            chart.draw();
+          }
+        },
+        onClick: (_e, els, chart) => {
+          const i = els.length ? els[0].index : -1;
+          if (i < 0) {
+            _trafficPinned = false;
+            _trafficActive = _trafficDefault;
+          } else if (_trafficPinned && _trafficActive === i) {
+            _trafficPinned = false;
+            _trafficActive = i;
+          } else {
+            _trafficPinned = true;
+            _trafficActive = i;
+          }
+          chart.draw();
+        },
         plugins: {
           legend: { display: false },
-          tooltip: {
-            backgroundColor: "rgba(26,29,46,0.94)",
-            padding: 10,
-            titleFont: { family: "'JetBrains Mono'", size: 11, weight: "700" },
-            bodyFont: { family: "'Plus Jakarta Sans'", size: 11 },
-            displayColors: false,
-            callbacks: {
-              title: (items) => items[0].label + ":00",
-              label: (item) =>
-                (item.datasetIndex === 0 ? "Rata-rata: " : "") +
-                KPI.fmtShort(item.raw) +
-                " " +
-                unit,
-              afterBody: (items) => {
-                const h = items[0].dataIndex;
-                const d = day.byDept[h] || {};
-                const keys = Object.keys(d).sort((a, b) => d[b] - d[a]);
-                if (!keys.length) return [];
-                return ["", "Tujuan:"].concat(
-                  keys.map((k) => "  " + k + "   " + KPI.fmtShort(d[k])),
-                );
-              },
-            },
-          },
+          tooltip: { enabled: false },
         },
         scales: {
           x: {
@@ -1422,7 +1460,7 @@ const OverviewPage = (() => {
               maxRotation: 0,
               autoSkip: false,
               // Tampilkan tiap 2 jam supaya tidak berdesakan di layar HP.
-              callback: (_, i) => (i % 2 === 0 ? pad2h(i) : ""),
+              callback: (_, i) => (i % 2 === 0 ? pad2h(TRAFFIC_HOURS[i]) : ""),
             },
           },
           y: {
