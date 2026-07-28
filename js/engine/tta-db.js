@@ -20,6 +20,52 @@ const TTADB = (() => {
     return DB.getClient();
   }
 
+  // ══════════════════════════════════════
+  // Cache — kamus dimuat sekali, bulan dimuat sesuai kebutuhan.
+  // Seluruh data TTA ±9 MB; memuat semuanya saat buka dashboard terlalu berat,
+  // jadi tiap bulan (±1 MB) baru diambil saat benar-benar dilihat.
+  // ══════════════════════════════════════
+  let _lookupsPromise = null;
+  let _monthsPromise = null;
+  const _monthPromises = new Map();
+
+  function _invalidateCache() {
+    _lookupsPromise = null;
+    _monthsPromise = null;
+    _monthPromises.clear();
+  }
+
+  // Muat kamus ke TTAEngine. Aman dipanggil berkali-kali — hanya sekali jalan.
+  function ensureLookups() {
+    if (!_lookupsPromise) {
+      _lookupsPromise = getLookups()
+        .then(l => { TTAEngine.setLookups(l); return l; })
+        .catch(err => { _lookupsPromise = null; throw err; });
+    }
+    return _lookupsPromise;
+  }
+
+  function ensureMonths() {
+    if (!_monthsPromise) {
+      _monthsPromise = getMonths().catch(err => { _monthsPromise = null; throw err; });
+    }
+    return _monthsPromise;
+  }
+
+  // Muat satu bulan ke TTAEngine. Panggilan kedua untuk bulan yang sama
+  // memakai promise yang sama, jadi klik cepat tidak memicu dua unduhan.
+  function ensureMonth(ym) {
+    let p = _monthPromises.get(ym);
+    if (!p) {
+      p = ensureLookups()
+        .then(() => loadMonth(ym))
+        .then(rows => { if (rows.length) TTAEngine.appendRows(rows); return rows.length; })
+        .catch(err => { _monthPromises.delete(ym); throw err; });
+      _monthPromises.set(ym, p);
+    }
+    return p;
+  }
+
   // ── Bulan berdasarkan Create Date (date + dLag) ──
   function _createMonth(r) {
     return TTAEngine.addDays(r[DATE_IDX], r[DLAG_IDX]).slice(0, 7);
@@ -95,6 +141,9 @@ const TTADB = (() => {
     // ── Kamus ──
     if (lookups) await _setMetaValue(K_LOOKUPS, lookups);
 
+    // Data di server berubah — cache harus dibuang supaya tidak basi.
+    _invalidateCache();
+
     return {
       inserted: totalInserted,
       replaced: totalReplaced,
@@ -150,11 +199,13 @@ const TTADB = (() => {
     const client = getClient();
     await client.from(TABLE).delete().neq('month', '');
     await client.from('meta').delete().in('key', [K_MONTHS, K_CREATE_MONTHS, K_LOOKUPS]);
+    _invalidateCache();
     return { deleted: true };
   }
 
   return {
     getClient, upsertByDate, loadMonth, loadAll,
     getMonths, getCreateMonths, getLookups, count, clearAll,
+    ensureLookups, ensureMonths, ensureMonth,
   };
 })();
