@@ -86,9 +86,23 @@ const ImportUI = (() => {
         return;
       }
 
+      // ══════ Gate 0: Router — file ini milik DB mana? ══════
+      // Judul kolom kedua file tidak beririsan sama sekali:
+      //   file produksi → 'mvt type', 'post date', 'qty brd'
+      //   file TTA      → 'create time', 'departement tujuan'
+      const headerRow = json[0].map(h => String(h || '').toLowerCase().trim());
+
+      if (headerRow.includes('create time') || headerRow.includes('departement tujuan')) {
+        return TTAImportUI.process(json);   // → tta_monthly_data
+      }
+      if (!headerRow.includes('mvt type')) {
+        hideOverlay();
+        showToast('File tidak dikenali (bukan file produksi maupun TTA)', 'error');
+        return;
+      }
+
       // ══════ Gate 1: Column Validation ══════
       showOverlay('VALIDASI KOLOM...');
-      const headerRow = json[0].map(h => String(h || '').toLowerCase().trim());
       const colMap = {};
       [...REQUIRED_COLS, ...OPTIONAL_COLS].forEach(name => {
         const idx = headerRow.indexOf(name);

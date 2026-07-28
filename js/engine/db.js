@@ -143,7 +143,9 @@ const DB = (() => {
   async function clearAll() {
     const client = getClient();
     await client.from('monthly_data').delete().neq('month', '');
-    await client.from('meta').delete().neq('key', '');
+    // Hanya key milik data produksi. Jangan pakai .neq('key','') — itu ikut
+    // menghapus tta_lookups, padahal tta_monthly_data masih memakainya.
+    await client.from('meta').delete().in('key', ['months', 'lookups']);
     return { deleted: true };
   }
 
