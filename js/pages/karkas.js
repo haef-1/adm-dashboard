@@ -210,12 +210,30 @@ const KarkasPage = (() => {
   // ═══════════════════════════════════════
   //  YIELD: FILTER + BUILD
   // ═══════════════════════════════════════
+  // Default periode Daily saat user belum memilih rentang sendiri: 2 bulan
+  // terakhir dihitung mundur dari tanggal data paling baru. Sengaja berbasis
+  // kalender, bukan "N baris data terakhir" — hari libur bikin jumlah baris
+  // tidak sama dengan jumlah hari, jadi slice(-60) akan mundur lebih jauh dari
+  // 2 bulan pada bulan yang banyak liburnya.
+  const Y_DAILY_DEFAULT_MONTHS = 2;
+
+  function yDefaultDailyRange(dates) {
+    if (!dates.length) return dates;
+    const [y, m, d] = dates[dates.length - 1].split('-').map(Number);
+    // d + 1 supaya rentangnya inklusif tepat 2 bulan: 31 Jul → mulai 1 Jun.
+    const from = new Date(y, m - 1 - Y_DAILY_DEFAULT_MONTHS, d + 1);
+    const fromStr = from.getFullYear() + '-'
+      + String(from.getMonth() + 1).padStart(2, '0') + '-'
+      + String(from.getDate()).padStart(2, '0');
+    return dates.filter(dt => dt >= fromStr);
+  }
+
   function yGetFilteredDates() {
     const dates = Engine.getAvailableDates();
     if (yPeriod === 'daily') {
       if (ySelectedItems) return ySelectedItems;
       if (ySelectedFrom && ySelectedTo) return dates.filter(d => d >= ySelectedFrom && d <= ySelectedTo);
-      return dates.slice(-7);
+      return yDefaultDailyRange(dates);
     } else if (yPeriod === 'weekly') {
       const wm = getWeekMap(dates);
       const keys = Object.keys(wm);
@@ -274,7 +292,7 @@ const KarkasPage = (() => {
     const dates = Engine.getAvailableDates();
     let rangeLabel;
     if (yPeriod === 'daily') {
-      const range = ySelectedItems || (ySelectedFrom && ySelectedTo ? dates.filter(d => d >= ySelectedFrom && d <= ySelectedTo) : dates.slice(-7));
+      const range = ySelectedItems || (ySelectedFrom && ySelectedTo ? dates.filter(d => d >= ySelectedFrom && d <= ySelectedTo) : yDefaultDailyRange(dates));
       if (range.length) {
         const a = range[0], b = range[range.length - 1];
         const yA = a.split('-')[0], yB = b.split('-')[0];
@@ -982,7 +1000,9 @@ const KarkasPage = (() => {
     }
 
     if (period === 'daily') {
-      const defaultCount = target === 'yield' ? 7 : 1;
+      // Rentang yang sudah terisi saat picker dibuka harus sama dengan yang
+      // sedang tampil di chart, jadi jumlahnya diambil dari default yang sama.
+      const defaultCount = target === 'yield' ? yDefaultDailyRange(dates).length : 1;
       openDailyRangePicker(dates, MAX, selFrom, selTo, selItems, btnId, applyResult, resetResult, defaultCount);
       return;
     }

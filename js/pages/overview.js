@@ -102,9 +102,12 @@ const OverviewPage = (() => {
                   <div id="trafficDateNav"></div>
                 </div>
               </div>
-              <div class="traffic-summary" id="trafficSummary"></div>
+              <div class="traffic-summary" id="trafficSummary">
+                <span class="traffic-skel-pill"></span>
+              </div>
               <div class="chart-wrap" id="trafficWrap" style="height:220px;position:relative;">
                 <canvas id="trafficChart"></canvas>
+                <div class="traffic-skel" id="trafficSkeleton">${TRAFFIC_SKELETON}</div>
               </div>
             </div>
           </div>
@@ -1146,6 +1149,28 @@ const OverviewPage = (() => {
   // Agregasi tetap memakai jam asli 0–23; urutan ini hanya untuk tampilan.
   const TRAFFIC_HOURS = Array.from({ length: 24 }, (_, i) => (i + 7) % 24);
 
+  // ── Skeleton selagi ringkasan TTA dimuat ──
+  // Ringkasannya datang dari jaringan (TTATraffic.getDays), jadi area chart
+  // sempat kosong — apalagi kalau Overview baru dibuka dari halaman lain.
+  // Tinggi batangnya dipatok, bukan acak, supaya tidak ada kesan angka.
+  // Kemunculannya ditunda lewat CSS: kalau datanya sudah di cache, skeleton
+  // ini tidak pernah sempat terlihat.
+  const TRAFFIC_SKELETON_HEIGHTS = [
+    18, 22, 30, 46, 58, 72, 64, 78, 88, 74, 62, 70, 82, 66, 54, 60, 48, 40, 34,
+    28, 24, 20, 16, 14,
+  ];
+
+  const TRAFFIC_SKELETON = TRAFFIC_SKELETON_HEIGHTS.map(
+    (h, i) =>
+      `<span class="traffic-skel-bar" style="height:${h}%;animation-delay:${(i % 8) * 90}ms"></span>`,
+  ).join("");
+
+  // Skeleton ringkasan (pill) ikut hilang sendiri: renderTrafficSummary dan
+  // showTrafficEmpty sama-sama menimpa isi #trafficSummary.
+  function hideTrafficSkeleton() {
+    document.getElementById("trafficSkeleton")?.classList.add("hide");
+  }
+
   function initTrafficChart() {
     const toggle = document.getElementById("trafficToggle");
     toggle?.querySelectorAll(".toggle-btn").forEach((btn) => {
@@ -1292,6 +1317,7 @@ const OverviewPage = (() => {
 
   function renderTrafficChart() {
     if (!trafficDate) return;
+    hideTrafficSkeleton();
 
     const mi = trafficMetricIdx();
     const day = { total: trafficDays[trafficDate]?.[mi] || new Array(24).fill(0) };
@@ -1322,7 +1348,8 @@ const OverviewPage = (() => {
     const el = document.getElementById("trafficSummary");
     if (!el) return;
 
-    const unit = trafficMetric === "kg" ? "kg" : "ekor";
+    // Totalnya cuma dipakai untuk membedakan "tanggal kosong" dari "ada data" —
+    // angkanya sendiri tidak lagi ditampilkan di baris ini.
     const sum = day.total.reduce((a, b) => a + b, 0);
 
     if (!sum) {
@@ -1339,12 +1366,12 @@ const OverviewPage = (() => {
 
     el.innerHTML =
       `<span class="traffic-peak">Paling padat jam ${pad2h(peak)}:00</span>` +
-      `<span class="traffic-total">${KPI.fmtShort(sum)} ${unit}</span>` +
       `<span class="traffic-note">· garis putus-putus = rata-rata ${KPI.formatMonthYear(ym)}</span>` +
       sparse;
   }
 
   function showTrafficEmpty(msg) {
+    hideTrafficSkeleton();
     const el = document.getElementById("trafficSummary");
     if (el) el.innerHTML = `<span class="traffic-note">${msg}</span>`;
     _trafficNav?.setLabel("—");

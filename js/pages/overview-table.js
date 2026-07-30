@@ -110,22 +110,24 @@ const OverviewTablePage = (() => {
 
     container.innerHTML = `
       <div class="page-title">Overview — Table</div>
-      <div class="table-section">
+      <!-- KPI + Persebaran Bahan berdampingan 50/50 di desktop, menumpuk
+           kembali di mobile (lihat .ovt-row di components.css). -->
+      <div class="ovt-row">
+      <div class="table-section ovt-section">
         <div class="table-section-header">
           <h3 class="table-section-title">KPI Harian</h3>
           <div class="table-controls">
             <div id="tblPeriodWrap"></div>
             <div id="tblRangeNav"></div>
-            <button class="table-export-btn" id="tblExport">
+            <button class="table-export-btn" id="tblExport" title="Export" aria-label="Export">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-              Export
             </button>
           </div>
         </div>
         <div class="table-wrapper" id="kpiTableWrap"></div>
       </div>
 
-      <div class="table-section">
+      <div class="table-section ovt-section">
         <div class="table-section-header">
           <h3 class="table-section-title" id="bhnTitle">Persebaran Bahan Harian</h3>
           <div class="table-controls">
@@ -136,16 +138,16 @@ const OverviewTablePage = (() => {
             <div id="bhnPvWrap"></div>
             <div id="bhnPeriodWrap"></div>
             <div id="bhnRangeNav"></div>
-            <button class="table-export-btn" id="bhnExport">
+            <button class="table-export-btn" id="bhnExport" title="Export" aria-label="Export">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-              Export
             </button>
           </div>
         </div>
         <div class="table-wrapper" id="bhnTableWrap"></div>
       </div>
+      </div>
 
-      <div class="table-section">
+      <div class="table-section ovt-section">
         <div class="table-section-header">
           <h3 class="table-section-title" id="smtTitle">Search Material</h3>
           <div class="table-controls">
@@ -156,9 +158,8 @@ const OverviewTablePage = (() => {
             </div>
             <div id="smtPeriodWrap"></div>
             <div id="smtRangeNav"></div>
-            <button class="table-export-btn" id="smtExport">
+            <button class="table-export-btn" id="smtExport" title="Export" aria-label="Export">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-              Export
             </button>
           </div>
         </div>
@@ -193,6 +194,93 @@ const OverviewTablePage = (() => {
     document.getElementById("tblExport").addEventListener("click", exportTable);
     document.getElementById("bhnExport").addEventListener("click", exportBahanTable);
     document.getElementById("smtExport").addEventListener("click", exportSmtTable);
+
+    initOvtRowSync();
+  }
+
+  // ══════════════════════════════════════
+  //  SINKRON TINGGI KPI ↔ PERSEBARAN BAHAN
+  // ══════════════════════════════════════
+  // Tinggi kartu sudah disamakan CSS (align-items: stretch), tapi dua bagian
+  // di dalamnya tidak ikut sejajar sendiri: baris judul+filter (jumlah
+  // kontrolnya beda, jadi bisa membungkus ke dua baris di satu panel saja) dan
+  // baris <thead> (judul kolom KPI lebih panjang, gampang membungkus saat
+  // panelnya cuma separuh lebar). Keduanya tidak bisa disamakan lewat CSS
+  // karena berada di dua subtree berbeda — subgrid bisa, tapi dukungannya
+  // belum merata. Jadi diukur ulang setiap kali ukurannya berubah.
+  let _ovtRo = null;
+
+  function initOvtRowSync() {
+    if (_ovtRo) { _ovtRo.disconnect(); _ovtRo = null; }
+
+    const row = document.querySelector(".ovt-row");
+    if (!row) return;
+
+    syncOvtRowHeights();
+    if (!window.ResizeObserver) return;
+
+    // Yang diamati kartunya: tingginya berubah saat isi tabel berganti, saat
+    // header membungkus, dan saat jendela diubah ukurannya — ketiga pemicu yang
+    // butuh pengukuran ulang. Reset + apply terjadi dalam satu frame, jadi
+    // ukuran akhirnya tidak berubah dan observer ini tidak memicu dirinya
+    // sendiri berulang-ulang.
+    let raf = 0;
+    _ovtRo = new ResizeObserver(() => {
+      if (raf) return;
+      raf = requestAnimationFrame(() => { raf = 0; syncOvtRowHeights(); });
+    });
+    row.querySelectorAll(".table-section").forEach(s => _ovtRo.observe(s));
+  }
+
+  function syncOvtRowHeights() {
+    const row = document.querySelector(".ovt-row");
+    if (!row) return;
+
+    const secs = [...row.querySelectorAll(":scope > .table-section")];
+    if (secs.length < 2) return;
+
+    const heads = secs.map(s => s.querySelector(".table-section-header"));
+    const theadRows = secs.map(s => s.querySelector("thead tr"));
+
+    // Selalu dilepas dulu: yang diukur harus tinggi alaminya, bukan sisa hasil
+    // sinkron sebelumnya (kalau tidak, nilainya cuma bisa membesar).
+    heads.forEach(h => { if (h) h.style.minHeight = ""; });
+    theadRows.forEach(tr => { if (tr) tr.style.height = ""; });
+
+    // Di mobile kartunya menumpuk — tidak ada yang perlu disejajarkan, dan
+    // memaksakan tinggi malah menyisakan ruang kosong.
+    if (getComputedStyle(row).display === "block") return;
+
+    const headH = Math.max(...heads.map(h => (h ? h.offsetHeight : 0)));
+    if (headH) heads.forEach(h => { if (h) h.style.minHeight = headH + "px"; });
+
+    const theadH = Math.max(...theadRows.map(tr => (tr ? tr.offsetHeight : 0)));
+    if (theadH) theadRows.forEach(tr => { if (tr) tr.style.height = theadH + "px"; });
+  }
+
+  // Angka rata kanan satu sama lain, tapi bloknya di tengah kolom: tiap nilai
+  // dibungkus span inline-block bertext-align:right, lalu semua span di satu
+  // kolom diberi lebar yang sama (selebar nilai terpanjang di kolom itu).
+  // Tanpa penyamaan lebar ini, span menyusut mengikuti isinya dan rata-kanannya
+  // tidak berarti apa-apa — tiap baris jadi bergeser sendiri-sendiri.
+  function syncValueWidths(table) {
+    if (!table) return;
+    const rows = [...table.querySelectorAll("tbody tr")];
+    if (!rows.length) return;
+
+    const colCount = table.querySelectorAll("thead th").length;
+    for (let c = 0; c < colCount; c++) {
+      const spans = rows
+        .map(tr => tr.children[c]?.querySelector(".val-num"))
+        .filter(Boolean);
+      if (!spans.length) continue;
+
+      // Dilepas dulu supaya yang diukur lebar alaminya — kalau tidak, nilainya
+      // hanya bisa membesar dan tidak pernah menyusut lagi saat datanya ganti.
+      spans.forEach(s => { s.style.minWidth = ""; });
+      const w = Math.max(...spans.map(s => s.offsetWidth));
+      if (w) spans.forEach(s => { s.style.minWidth = w + "px"; });
+    }
   }
 
   function initPeriodSelector() {
@@ -248,9 +336,6 @@ const OverviewTablePage = (() => {
       return;
     }
 
-    const MAX_DAILY = 31;
-    const MAX_WEEKLY = 999;
-    const MAX_MONTHLY = 999;
     let rows = [];
 
     if (period === "daily") {
@@ -328,7 +413,7 @@ const OverviewTablePage = (() => {
     const columns = [
       { key: "date", label: "Tanggal" },
       { key: "yk", label: "Yield Karkas (%)" },
-      { key: "yb", label: "Yield Byproduct (%)" },
+      { key: "yb", label: "Yield Bypro (%)" },
       { key: "w", label: "Waste (%)" },
       { key: "susut", label: "Susut LB (%)" },
     ];
@@ -338,17 +423,17 @@ const OverviewTablePage = (() => {
       <table class="data-table">
         <thead>
           <tr>
-            ${columns.map(c => `<th class="sortable ${sortCol === c.key ? (sortDir === 'asc' ? 'sort-asc' : 'sort-desc') : ''}" data-col="${c.key}">${c.label}</th>`).join("")}
+            ${columns.map(c => `<th class="sortable ${sortCol === c.key ? (sortDir === 'asc' ? 'sort-asc' : 'sort-desc') : ''}" data-col="${c.key}"><span class="th-label">${c.label}</span></th>`).join("")}
           </tr>
         </thead>
         <tbody>
           ${rows.length ? rows.map(r => `
             <tr class="${r.date === latestDate ? 'row-latest' : ''}">
               <td>${r.label}</td>
-              <td data-v="${r.yk}">${r.yk < 74.5 ? '<span class="val-danger">' + r.yk.toFixed(2) + '</span>' : r.yk.toFixed(2)}</td>
-              <td data-v="${r.yb}">${r.yb.toFixed(2)}</td>
-              <td data-v="${r.w}">${r.w > 4.5 ? '<span class="val-danger">' + r.w.toFixed(2) + '</span>' : r.w.toFixed(2)}</td>
-              <td data-v="${r.susut}">${r.susut.toFixed(2)}</td>
+              <td data-v="${r.yk}"><span class="val-num">${r.yk < 74.5 ? '<span class="val-danger">' + r.yk.toFixed(2) + '</span>' : r.yk.toFixed(2)}</span></td>
+              <td data-v="${r.yb}"><span class="val-num">${r.yb.toFixed(2)}</span></td>
+              <td data-v="${r.w}"><span class="val-num">${r.w > 4.5 ? '<span class="val-danger">' + r.w.toFixed(2) + '</span>' : r.w.toFixed(2)}</span></td>
+              <td data-v="${r.susut}"><span class="val-num">${r.susut.toFixed(2)}</span></td>
             </tr>
           `).join("") : `<tr><td colspan="5" class="table-empty">Tidak ada data untuk periode ini.</td></tr>`}
         </tbody>
@@ -356,6 +441,7 @@ const OverviewTablePage = (() => {
     `;
 
     wrap.classList.toggle("scrollable", rows.length > 7);
+    syncValueWidths(wrap.querySelector(".data-table"));
 
     // Sort click handlers
     wrap.querySelectorAll("th.sortable").forEach(th => {
@@ -394,7 +480,8 @@ const OverviewTablePage = (() => {
     if (!dates.length) return;
 
     if (period === "daily") {
-      openDailyRangePicker(dates, 31);
+      // Tanpa argumen batas: rentangnya bebas, sama seperti weekly/monthly.
+      openDailyRangePicker(dates);
     } else {
       openGridRangePicker(dates);
     }
@@ -413,7 +500,10 @@ const OverviewTablePage = (() => {
     document.querySelectorAll(".range-picker-popup").forEach(el => el.remove());
   }
 
+  // MAX opsional di ketiga picker harian di halaman ini: kalau tidak diisi,
+  // tidak ada tanggal yang dikunci dan keterangan "maks N hari" tidak muncul.
   function openDailyRangePicker(dates, MAX) {
+    const maxDays = MAX || Infinity;
     const availSet = new Set(dates);
     const allMonths = [...new Set(dates.map(d => d.slice(0, 7)))];
 
@@ -453,7 +543,7 @@ const OverviewTablePage = (() => {
       const hint = clickPhase === 0 ? "Pilih tanggal mulai" : "Pilih tanggal akhir";
       popup.innerHTML = `
         <div class="range-picker-header">
-          <span class="range-picker-title">${hint} <span class="range-picker-hint">(maks ${MAX} hari)</span></span>
+          <span class="range-picker-title">${hint}${Number.isFinite(maxDays) ? ` <span class="range-picker-hint">(maks ${maxDays} hari)</span>` : ""}</span>
           <button class="range-picker-close" id="rpClose">×</button>
         </div>
         <div class="range-daily-summary">
@@ -557,9 +647,9 @@ const OverviewTablePage = (() => {
         const isEndpoint = dateStr === fromDate || dateStr === toDate;
 
         let tooFar = false;
-        if (!isFuture && clickPhase === 1 && fromDate) {
+        if (Number.isFinite(maxDays) && !isFuture && clickPhase === 1 && fromDate) {
           const diff = Math.round((new Date(dateStr) - new Date(fromDate)) / 86400000);
-          if (Math.abs(diff) >= MAX) tooFar = true;
+          if (Math.abs(diff) >= maxDays) tooFar = true;
         }
 
         const cell = document.createElement("div");
@@ -610,7 +700,6 @@ const OverviewTablePage = (() => {
   }
 
   function openGridRangePicker(dates) {
-    const MAX = period === "weekly" ? 999 : 999;
     let items = [];
     if (period === "weekly") {
       const wm = getWeekMap(dates);
@@ -876,15 +965,15 @@ const OverviewTablePage = (() => {
       <table class="data-table">
         <thead>
           <tr>
-            ${columns.map(c => `<th class="sortable ${bhnSortCol === c.key ? (bhnSortDir === 'asc' ? 'sort-asc' : 'sort-desc') : ''}" data-col="${c.key}">${c.label}</th>`).join("")}
+            ${columns.map(c => `<th class="sortable ${bhnSortCol === c.key ? (bhnSortDir === 'asc' ? 'sort-asc' : 'sort-desc') : ''}" data-col="${c.key}"><span class="th-label">${c.label}</span></th>`).join("")}
           </tr>
         </thead>
         <tbody>
           ${rows.length ? rows.map(r => `
             <tr class="${r.date === latestDate ? 'row-latest' : ''}">
               <td>${r.label}</td>
-              ${BAHAN_DEPTS.map(dept => `<td data-v="${r[dept]}">${fmtVal(r[dept])}</td>`).join("")}
-              <td data-v="${r.total}"><strong>${fmtVal(r.total)}</strong></td>
+              ${BAHAN_DEPTS.map(dept => `<td data-v="${r[dept]}"><span class="val-num">${fmtVal(r[dept])}</span></td>`).join("")}
+              <td data-v="${r.total}"><span class="val-num"><strong>${fmtVal(r.total)}</strong></span></td>
             </tr>
           `).join("") : `<tr><td colspan="6" class="table-empty">Tidak ada data untuk periode ini.</td></tr>`}
         </tbody>
@@ -892,6 +981,7 @@ const OverviewTablePage = (() => {
     `;
 
     wrap.classList.toggle("scrollable", rows.length > 7);
+    syncValueWidths(wrap.querySelector(".data-table"));
 
     // Sort click handlers
     wrap.querySelectorAll("th.sortable").forEach(th => {
@@ -930,7 +1020,7 @@ const OverviewTablePage = (() => {
     if (!dates.length) return;
 
     if (bhnPeriod === "daily") {
-      openBhnDailyRangePicker(dates, 31);
+      openBhnDailyRangePicker(dates);
     } else {
       openBhnGridRangePicker(dates);
     }
@@ -950,6 +1040,7 @@ const OverviewTablePage = (() => {
   }
 
   function openBhnDailyRangePicker(dates, MAX) {
+    const maxDays = MAX || Infinity;
     const availSet = new Set(dates);
     const allMonths = [...new Set(dates.map(d => d.slice(0, 7)))];
 
@@ -989,7 +1080,7 @@ const OverviewTablePage = (() => {
       const hint = clickPhase === 0 ? "Pilih tanggal mulai" : "Pilih tanggal akhir";
       popup.innerHTML = `
         <div class="range-picker-header">
-          <span class="range-picker-title">${hint} <span class="range-picker-hint">(maks ${MAX} hari)</span></span>
+          <span class="range-picker-title">${hint}${Number.isFinite(maxDays) ? ` <span class="range-picker-hint">(maks ${maxDays} hari)</span>` : ""}</span>
           <button class="range-picker-close" id="bhnRpClose">×</button>
         </div>
         <div class="range-daily-summary">
@@ -1093,9 +1184,9 @@ const OverviewTablePage = (() => {
         const isEndpoint = dateStr === fromDate || dateStr === toDate;
 
         let tooFar = false;
-        if (!isFuture && clickPhase === 1 && fromDate) {
+        if (Number.isFinite(maxDays) && !isFuture && clickPhase === 1 && fromDate) {
           const diff = Math.round((new Date(dateStr) - new Date(fromDate)) / 86400000);
-          if (Math.abs(diff) >= MAX) tooFar = true;
+          if (Math.abs(diff) >= maxDays) tooFar = true;
         }
 
         const cell = document.createElement("div");
@@ -1788,7 +1879,7 @@ const OverviewTablePage = (() => {
     if (!dates.length) return;
 
     if (smtPeriod === "daily") {
-      openSmtDailyRangePicker(dates, 31);
+      openSmtDailyRangePicker(dates);
     } else {
       openSmtGridRangePicker(dates);
     }
@@ -1808,6 +1899,7 @@ const OverviewTablePage = (() => {
   }
 
   function openSmtDailyRangePicker(dates, MAX) {
+    const maxDays = MAX || Infinity;
     const availSet = new Set(dates);
     const allMonths = [...new Set(dates.map(d => d.slice(0, 7)))];
 
@@ -1847,7 +1939,7 @@ const OverviewTablePage = (() => {
       const hint = clickPhase === 0 ? "Pilih tanggal mulai" : "Pilih tanggal akhir";
       popup.innerHTML = `
         <div class="range-picker-header">
-          <span class="range-picker-title">${hint} <span class="range-picker-hint">(maks ${MAX} hari)</span></span>
+          <span class="range-picker-title">${hint}${Number.isFinite(maxDays) ? ` <span class="range-picker-hint">(maks ${maxDays} hari)</span>` : ""}</span>
           <button class="range-picker-close" id="smtRpClose">×</button>
         </div>
         <div class="range-daily-summary">
@@ -1951,9 +2043,9 @@ const OverviewTablePage = (() => {
         const isEndpoint = dateStr === fromDate || dateStr === toDate;
 
         let tooFar = false;
-        if (!isFuture && clickPhase === 1 && fromDate) {
+        if (Number.isFinite(maxDays) && !isFuture && clickPhase === 1 && fromDate) {
           const diff = Math.round((new Date(dateStr) - new Date(fromDate)) / 86400000);
-          if (Math.abs(diff) >= MAX) tooFar = true;
+          if (Math.abs(diff) >= maxDays) tooFar = true;
         }
 
         const cell = document.createElement("div");

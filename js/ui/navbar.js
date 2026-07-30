@@ -69,6 +69,15 @@ const Navbar = (() => {
     // Update hash
     location.hash = page;
 
+    // Selaraskan mode tampilan dengan halaman yang benar-benar dibuka.
+    // Penting untuk navigasi yang datang dari luar sidebar (mis. spotlight
+    // WhatsNew): tanpa ini tombol toggle bisa menunjuk mode yang berbeda
+    // dari isi layar, dan klik nav berikutnya melompat ke mode lama.
+    viewMode = page.endsWith('-table') ? 'table' : 'chart';
+    document.querySelectorAll('.view-toggle-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.mode === viewMode);
+    });
+
     // Update active nav — match by either data-page or data-page-table
     document.querySelectorAll('.nav-item').forEach(item => {
       item.classList.toggle('active', item.dataset.page === page || item.dataset.pageTable === page);

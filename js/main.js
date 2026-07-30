@@ -87,6 +87,23 @@ const App = (() => {
     await Auth.applyRole();
     await loadFromDB();
     if (Auth.isAdmin()) ImportUI.init();
+    prefetchTraffic();
+  }
+
+  // Ringkasan TTA dimuat lazy oleh halaman Overview, jadi kalau user mendarat
+  // di halaman lain jaringannya baru jalan saat dia pindah ke Overview —
+  // termasuk lewat tombol "Lihat fiturnya" di What's New, yang jadi terasa
+  // menggantung. Hangatkan cache-nya di sini; TTATraffic.getDays() menyimpan
+  // promise-nya di level modul, jadi halaman Overview nanti memungut promise
+  // yang sama, bukan request kedua. Sengaja tidak di-await: boot tidak boleh
+  // menunggu data yang belum tentu dilihat.
+  function prefetchTraffic() {
+    if (typeof TTATraffic === 'undefined') return;
+    TTATraffic.getDays().catch(err =>
+      // Kegagalan di sini tidak diumumkan: halaman Overview memanggil ulang
+      // getDays() dan di sanalah pesan errornya ditampilkan ke user.
+      console.warn('[App] prefetch ringkasan TTA gagal:', err.message)
+    );
   }
 
   async function loadFromDB() {

@@ -98,7 +98,7 @@ const KarkasTablePage = (() => {
 
     container.innerHTML = `
       <div class="page-title">Karkas — Table</div>
-      <div class="table-section">
+      <div class="table-section krk-table-section">
         <div class="table-section-header">
           <h3 class="table-section-title" id="krkTitle">Karkas Distribution Harian</h3>
           <div class="table-controls">
@@ -109,9 +109,8 @@ const KarkasTablePage = (() => {
             <div id="krkPvWrap"></div>
             <div id="krkPeriodWrap"></div>
             <div id="krkRangeNav"></div>
-            <button class="table-export-btn" id="krkExport">
+            <button class="table-export-btn" id="krkExport" title="Export" aria-label="Export">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-              Export
             </button>
           </div>
         </div>
@@ -341,7 +340,7 @@ const KarkasTablePage = (() => {
 
         const isLast = mi === matdescs.length - 1;
         bodyHtml += `<tr class="krk-sub-row${isLast ? " krk-sub-last" : ""}" data-dept="${dept}"${isCollapsed ? ' style="display:none"' : ''}>
-          <td class="krk-mat-cell" title="${md}">${md}</td>
+          <td class="krk-mat-cell" title="${md}"><span class="krk-mat-name">${md}</span></td>
           ${vals.map((v, i) => `<td data-v="${v}"${i === lastIdx ? ' class="krk-col-latest"' : ''}>${fmtVal(v)}</td>`).join("")}
           <td data-v="${rowTotal}">${fmtVal(rowTotal)}</td>
         </tr>`;
@@ -441,7 +440,13 @@ const KarkasTablePage = (() => {
 
     // Single fixed container for scrollbar + header (no gap possible)
     const fixedContainer = document.createElement("div");
-    fixedContainer.style.cssText = `position:fixed;top:${scrollTop}px;display:none;z-index:50;background:var(--bg);`;
+    // z-index harus DI BAWAH .sidebar-overlay (49) dan .sidebar (50 desktop /
+    // 51 mobile): keduanya elemen fixed di body juga, jadi kalau setara atau
+    // lebih tinggi, header yang menempel ini melayang di atas sidebar yang
+    // sedang dibuka — tidak ikut teredup seperti sisa halaman. Dept bar satu
+    // tingkat lagi di bawah header supaya saat terdorong ke atas dia masuk ke
+    // balik header, bukan menimpanya.
+    fixedContainer.style.cssText = `position:fixed;top:${scrollTop}px;display:none;z-index:48;background:var(--bg);`;
     document.body.appendChild(fixedContainer);
 
     // Fixed scroll proxy inside container
@@ -470,7 +475,7 @@ const KarkasTablePage = (() => {
     // Fixed dept row clone (separate, below container)
     const deptBar = document.createElement("div");
     deptBar.className = "krk-fixed-dept";
-    deptBar.style.cssText = `position:fixed;overflow:hidden;display:none;z-index:49;background:var(--bg);`;
+    deptBar.style.cssText = `position:fixed;overflow:hidden;display:none;z-index:47;background:var(--bg);`;
     const deptCloneTable = document.createElement("table");
     deptCloneTable.className = table.className;
     deptCloneTable.style.willChange = "transform";
@@ -500,7 +505,21 @@ const KarkasTablePage = (() => {
 
     let cachedDeptTd = null;
 
+    // Kolom departemen dibekukan lewat position:sticky, jadi saat tabel
+    // digeser ke kanan kolom itu menumpuk di atas kolom lain tanpa batas yang
+    // terlihat. Garis pembatasnya hanya dimunculkan saat benar-benar tergeser
+    // — kalau selalu ada, di posisi awal dia cuma jadi garis nyasar.
+    // Header dan dept bar punya salinan kolom bekunya sendiri di luar tabel,
+    // jadi ketiganya harus ditandai bersamaan supaya garisnya menyambung.
+    function syncFrozenEdge() {
+      const on = wrap.scrollLeft > 0;
+      wrap.classList.toggle("is-frozen", on);
+      pinnedHeaderCell.classList.toggle("is-frozen", on);
+      pinnedDeptCell.classList.toggle("is-frozen", on);
+    }
+
     function syncFixedScroll() {
+      syncFrozenEdge();
       if (!headerActive) return;
       const sl = wrap.scrollLeft;
       const tx = "translateX(" + -sl + "px)";
@@ -620,9 +639,26 @@ const KarkasTablePage = (() => {
         pinnedDeptCell.style.height = pinned.offsetHeight + "px";
       }
 
+      // Bar ini menempel di bawah header, jadi baris departemen berikutnya
+      // naik LEWAT BAWAHNYA — sampai baris itu benar-benar melewati garis,
+      // yang terlihat masih departemen lama walau peralihannya sudah 90%.
+      // Solusinya bukan menaikkan z-index (baris aslinya ada di dalam
+      // .page-content, tidak bisa menang lawan elemen fixed di body), tapi
+      // mendorong bar lama ke atas persis sebanyak baris baru masuk. Yang
+      // terdorong ke atas garis tertutup header (z-index 50 > 49) dan topbar,
+      // jadi tidak ada yang bocor ke layar.
+      const barH = pinned.offsetHeight;
+      const nextDept = deptRows[deptRows.indexOf(pinned) + 1];
+      let shift = 0;
+      if (nextDept) {
+        const overlap =
+          containerBottom + barH - nextDept.getBoundingClientRect().top;
+        if (overlap > 0) shift = Math.min(overlap, barH);
+      }
+
       const wrapRect = wrap.getBoundingClientRect();
       const sl = wrap.scrollLeft;
-      deptBar.style.top = containerBottom + "px";
+      deptBar.style.top = containerBottom - shift + "px";
       deptBar.style.left = wrapRect.left + "px";
       deptBar.style.width = wrap.clientWidth + "px";
       deptCloneTable.style.transform = "translateX(" + -sl + "px)";
@@ -649,6 +685,7 @@ const KarkasTablePage = (() => {
     }, { rootMargin: `-${topbarH}px 0px 0px 0px`, threshold: 0 });
 
     observer.observe(sentinel);
+    syncFrozenEdge();
 
     _stickyCleanup = () => {
       observer.disconnect();
@@ -656,6 +693,7 @@ const KarkasTablePage = (() => {
       scrollProxy.remove();
       fixedContainer.remove();
       deptBar.remove();
+      wrap.classList.remove("is-frozen");
       if (sc) sc.removeEventListener("scroll", onPageScroll);
     };
   }
@@ -693,7 +731,10 @@ const KarkasTablePage = (() => {
     if (!dates.length) return;
 
     if (krkPeriod === "daily") {
-      openDailyRangePicker(dates, 31);
+      // Tanpa batas jumlah hari — sama seperti weekly/monthly yang memang
+      // tidak pernah dibatasi. Konsekuensinya tabel bisa jadi sangat lebar
+      // (satu kolom per tanggal); itu ditangani scroll horizontal + kolom beku.
+      openDailyRangePicker(dates);
     } else {
       openGridRangePicker(dates);
     }
@@ -712,7 +753,10 @@ const KarkasTablePage = (() => {
     document.querySelectorAll(".krk-range-picker-popup").forEach(el => el.remove());
   }
 
+  // MAX opsional: kalau tidak diisi, rentangnya bebas — tidak ada tanggal yang
+  // dikunci dan tidak ada keterangan "maks N hari" di judul popup.
   function openDailyRangePicker(dates, MAX) {
+    const maxDays = MAX || Infinity;
     const availSet = new Set(dates);
     const allMonths = [...new Set(dates.map(d => d.slice(0, 7)))];
 
@@ -752,7 +796,7 @@ const KarkasTablePage = (() => {
       const hint = clickPhase === 0 ? "Pilih tanggal mulai" : "Pilih tanggal akhir";
       popup.innerHTML = `
         <div class="range-picker-header">
-          <span class="range-picker-title">${hint} <span class="range-picker-hint">(maks ${MAX} hari)</span></span>
+          <span class="range-picker-title">${hint}${Number.isFinite(maxDays) ? ` <span class="range-picker-hint">(maks ${maxDays} hari)</span>` : ""}</span>
           <button class="range-picker-close" id="krkRpClose">×</button>
         </div>
         <div class="range-daily-summary">
@@ -856,9 +900,9 @@ const KarkasTablePage = (() => {
         const isEndpoint = dateStr === fromDate || dateStr === toDate;
 
         let tooFar = false;
-        if (!isFuture && clickPhase === 1 && fromDate) {
+        if (Number.isFinite(maxDays) && !isFuture && clickPhase === 1 && fromDate) {
           const diff = Math.round((new Date(dateStr) - new Date(fromDate)) / 86400000);
-          if (Math.abs(diff) >= MAX) tooFar = true;
+          if (Math.abs(diff) >= maxDays) tooFar = true;
         }
 
         const cell = document.createElement("div");

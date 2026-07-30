@@ -2429,14 +2429,18 @@
 }
 
 
+/* Ikon saja, tanpa teks — maksudnya disampaikan lewat title/aria-label di
+   markup, jadi tooltip dan pembaca layar tetap menyebut "Export".
+   Kotak 30×30 supaya tingginya sama dengan select dan tombol toggle di
+   sebelahnya. */
 .table-export-btn {
   display: flex;
   align-items: center;
-  gap: 5px;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 600;
-  padding: 6px 12px;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  flex-shrink: 0;
   border: 1px solid var(--border);
   border-radius: 6px;
   background: var(--surface);
@@ -2643,7 +2647,184 @@
   white-space: nowrap;
 }
 
+/* ── Overview Table ──
+   Kelas .ovt-section membatasi aturan di bawah ke halaman Overview Table saja;
+   .table-section dan .data-table dipakai di halaman lain juga. */
+.table-section.ovt-section {
+  margin-left: 3%;
+  margin-right: 3%;
+}
+@media (max-width: 768px) {
+  .table-section.ovt-section {
+    margin-left: 5px;
+    margin-right: 5px;
+  }
+}
+
+/* KPI Harian + Persebaran Bahan berdampingan 50/50 di desktop.
+   Margin 3% pindah ke barisnya, dan margin samping kedua panel dinolkan supaya
+   pembaginya benar-benar rata tengah. `min-width: 0` wajib: tanpa itu tabel
+   lebar memaksa flex item melar melewati jatah 50%-nya, dan pembagiannya jadi
+   timpang alih-alih tabelnya yang bergulir sendiri. */
+.ovt-row {
+  display: flex;
+  /* stretch (bukan flex-start): kedua kartu ikut setinggi yang tertinggi. */
+  align-items: stretch;
+  gap: 12px;
+  margin: 0 3%;
+}
+.ovt-row > .table-section.ovt-section {
+  flex: 1 1 0;
+  min-width: 0;
+  margin-left: 0;
+  margin-right: 0;
+  /* Kolom flex supaya area tabel yang menyerap sisa tinggi kartu — tanpa ini
+     kartu memang sama tinggi tapi tabelnya berhenti di tengah dan sisanya
+     jadi ruang kosong yang tidak ikut berlatar. */
+  display: flex;
+  flex-direction: column;
+}
+.ovt-row > .table-section.ovt-section > .table-wrapper {
+  flex: 1;
+}
+/* Judul naik ke barisnya sendiri, filter turun di bawahnya. Kalau tetap
+   berdampingan, di lebar separuh layar filternya terdesak dan membungkus
+   dengan cara yang berbeda di tiap panel. Rata kanan mengikuti pola panel
+   Trafic Bahan di halaman Overview. */
+.ovt-row .table-section-header {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+.ovt-row .table-controls {
+  justify-content: flex-end;
+}
+/* Panel kanan adalah :last-child dari barisnya, jadi tanpa ini dia kena aturan
+   .table-section:last-child { margin-bottom: 240px } dan menyisakan lubang
+   besar di tengah halaman. */
+.ovt-row > .table-section.ovt-section:last-child {
+  margin-bottom: 16px;
+}
+
+@media (max-width: 768px) {
+  .ovt-row {
+    display: block;
+    margin: 0;
+  }
+  .ovt-row > .table-section.ovt-section {
+    margin-left: 5px;
+    margin-right: 5px;
+  }
+}
+
+/* ── Judul kolom KPI & Persebaran Bahan ──
+   Rata tengah, kecuali kolom pertama (rata kiri, isinya tanggal) dan kolom
+   terakhir (rata kanan, isinya total/angka) supaya sejajar dengan nilainya. */
+.ovt-row .data-table thead th {
+  text-align: center;
+  vertical-align: middle;
+}
+.ovt-row .data-table thead th:first-child {
+  text-align: left;
+}
+.ovt-row .data-table thead th:last-child {
+  text-align: right;
+}
+
+/* Maksimal 2 baris; label yang lebih panjang dipotong dengan elipsis. Clamp
+   dipasang pada span, bukan pada <th> langsung: `display: -webkit-box` di sel
+   tabel akan mencabut sel itu dari layout tabel dan merusak kolomnya. */
+.ovt-row .data-table thead th .th-label {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.3;
+}
+
+/* Panah urutannya pindah ke dalam span supaya ikut menempel di akhir baris
+   terakhir label — kalau tetap di <th>, dia jatuh ke baris sendiri di bawah
+   span yang sudah jadi blok. */
+.ovt-row .data-table thead th.sort-asc::after,
+.ovt-row .data-table thead th.sort-desc::after {
+  content: none;
+}
+.ovt-row .data-table thead th.sort-asc .th-label::after {
+  content: " ▲";
+  font-size: 9px;
+  color: var(--blue);
+}
+.ovt-row .data-table thead th.sort-desc .th-label::after {
+  content: " ▼";
+  font-size: 9px;
+  color: var(--blue);
+}
+
+/* Nilai: rata kanan satu sama lain, bloknya di tengah kolom. Sel-nya rata
+   tengah, dan span di dalamnya yang membawa rata kanan — lebarnya disamakan
+   per kolom oleh syncValueWidths() di overview-table.js. `tabular-nums` bikin
+   semua digit selebar sama, jadi barisnya tetap lurus walau angkanya berubah. */
+.ovt-row .data-table tbody td[data-v] {
+  text-align: center;
+}
+.ovt-row .data-table tbody td[data-v] > .val-num {
+  display: inline-block;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Garis pemisah antar kolom periode. Kolom terakhir dilewati supaya tidak ada
+   garis menggantung di tepi tabel. */
+.ovt-section .data-table th,
+.ovt-section .data-table td {
+  border-right: 1px solid var(--border-light);
+}
+.ovt-section .data-table th:last-child,
+.ovt-section .data-table td:last-child {
+  border-right: none;
+}
+
 /* ── Karkas Table ── */
+/* Kelasnya khusus halaman Karkas Distribution — .table-section dipakai juga
+   oleh Overview Table, yang lebarnya sengaja dibiarkan seperti semula.
+   Header, scroll proxy, dan header/dept bar yang menempel semuanya mengukur
+   posisi dari .krk-table-wrap saat runtime, jadi ikut bergeser sendiri. */
+.table-section.krk-table-section {
+  margin-left: 5%;
+  margin-right: 5%;
+}
+/* Di layar sempit 5% cuma memakan ruang tabel yang sudah harus digulir
+   horizontal — kembali ke jarak tepi bawaan. */
+@media (max-width: 768px) {
+  .table-section.krk-table-section {
+    margin-left: 5px;
+    margin-right: 5px;
+  }
+}
+
+/* Garis pemisah antar kolom periode, supaya angka antar tanggal tidak menyatu.
+   Sengaja pakai border (bukan box-shadow seperti tepi kolom beku): tabelnya
+   `border-collapse: collapse`, dan di mode itu border pada sel justru satu-
+   satunya yang dilukis. Kolom terakhir (Total) tidak diberi garis kanan supaya
+   tidak ada garis menggantung di tepi tabel. */
+.krk-table th,
+.krk-table td {
+  border-right: 1px solid var(--border-light);
+}
+.krk-table th:last-child,
+.krk-table td:last-child {
+  border-right: none;
+}
+/* Header dan dept bar yang menempel memakai mini-table berisi satu sel saja
+   untuk kolom beku, jadi sel itu ikut kena aturan :last-child di atas dan
+   garisnya hilang — padahal di badan tabel kolom itu bergaris. Kembalikan. */
+.krk-pinned-header-cell .krk-table th,
+.krk-pinned-dept-cell .krk-table td {
+  border-right: 1px solid var(--border-light);
+}
 .krk-table.smt-table td:first-child {
   background: var(--surface);
 }
@@ -2701,10 +2882,16 @@
   font-size: 11px;
   font-weight: 500;
   color: var(--text-mid);
+  max-width: 200px;
+}
+/* Pemotongan nama material pindah ke span di dalamnya: kalau `overflow:hidden`
+   tetap di sel-nya, garis pembatas kolom beku (digambar sebagai ::after yang
+   meluber ke kanan sel) ikut terpotong di setiap baris material. */
+.krk-mat-name {
+  display: block;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 200px;
 }
 .krk-col-latest {
   background: rgba(59, 125, 221, 0.06);
@@ -2749,6 +2936,46 @@
   overflow: hidden;
 }
 
+/* ── Batas kolom departemen yang dibekukan ──
+   Kolom pertama sticky, jadi saat tabel digeser ke kanan dia menumpuk di atas
+   kolom lain tanpa tepi yang terbaca. Garis ini hanya muncul kalau tabelnya
+   memang tergeser (kelas .is-frozen dipasang dari karkas-table.js) — kalau
+   selalu ada, di posisi awal dia cuma jadi garis nyasar.
+
+   Sengaja ::after, BUKAN box-shadow: tabelnya `border-collapse: collapse`, dan
+   di mode itu browser tidak melukis box-shadow pada <td>/<th> sama sekali —
+   yang tampak cuma dua overlay div di bawah, jadi garisnya seolah hanya ada di
+   baris departemen. Pseudo-element tidak kena batasan itu.
+   `left: 100%` menaruh strip tepat di luar tepi kanan sel, jadi buramnya jatuh
+   di atas konten yang tergeser, bukan ke dalam kolom bekunya. */
+.krk-table-wrap.is-frozen .krk-table th:first-child::after,
+.krk-table-wrap.is-frozen .krk-table td:first-child::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 100%;
+  width: 12px;
+  pointer-events: none;
+  background: linear-gradient(
+    to right,
+    rgba(107, 112, 148, 0.22) 0 1px,
+    rgba(24, 28, 48, 0.1) 1px,
+    rgba(24, 28, 48, 0) 100%
+  );
+}
+
+/* Header dan dept bar yang menempel punya salinan kolom bekunya sendiri di
+   luar tabel. Keduanya <div> biasa — box-shadow jalan di sini — dan
+   `overflow:hidden` mereka akan memotong ::after, jadi caranya beda dari sel
+   tabel di atas walau hasilnya dibuat setara. */
+.krk-pinned-header-cell.is-frozen,
+.krk-pinned-dept-cell.is-frozen {
+  box-shadow:
+    1px 0 0 rgba(107, 112, 148, 0.22),
+    8px 0 10px rgba(24, 28, 48, 0.1);
+}
+
 /* ═══════════════════════════════════════
    TRAFIC BAHAN PER JAM (TTA)
    ═══════════════════════════════════════ */
@@ -2784,15 +3011,75 @@
   color: var(--text);
 }
 
-.traffic-total {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  color: var(--text-soft);
-}
-
 .traffic-note {
   font-size: 11px;
   color: var(--text-muted);
+}
+
+/* ── Skeleton grafik traffic ──
+   Muncul selagi ringkasan TTA diambil dari jaringan. Fade-in-nya sengaja
+   ditunda 220ms: kalau datanya sudah hangat di cache, chart langsung tergambar
+   dan skeleton ini tidak pernah sempat terlihat — jadi tidak ada kedipan. */
+.traffic-skel {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  padding: 24px 2px 26px;
+  pointer-events: none;
+  opacity: 0;
+  animation: traffic-skel-in 0.3s ease 0.22s forwards;
+}
+
+.traffic-skel.hide {
+  display: none;
+}
+
+@keyframes traffic-skel-in {
+  to { opacity: 1; }
+}
+
+.traffic-skel-bar {
+  flex: 1;
+  min-width: 0;
+  border-radius: 3px 3px 0 0;
+  background: var(--border);
+  animation: traffic-skel-pulse 1.4s ease-in-out infinite;
+}
+
+.traffic-skel-pill {
+  display: inline-block;
+  width: 190px;
+  height: 13px;
+  border-radius: 999px;
+  background: var(--border);
+  opacity: 0;
+  animation:
+    traffic-skel-in 0.3s ease 0.22s forwards,
+    traffic-skel-pulse 1.4s ease-in-out 0.22s infinite;
+}
+
+@keyframes traffic-skel-pulse {
+  0%, 100% { opacity: 0.45; }
+  50%      { opacity: 0.9; }
+}
+
+@keyframes traffic-skel-in-soft {
+  to { opacity: 0.55; }
+}
+
+/* Denyutnya dimatikan, tapi fade-in yang tertunda itu dipertahankan — dia
+   bukan hiasan, dialah yang mencegah skeleton berkedip saat data sudah
+   hangat di cache. */
+@media (prefers-reduced-motion: reduce) {
+  .traffic-skel-bar {
+    animation: none;
+    opacity: 0.55;
+  }
+  .traffic-skel-pill {
+    animation: traffic-skel-in-soft 0.3s ease 0.22s forwards;
+  }
 }
 
 @media (max-width: 860px) {
@@ -2803,5 +3090,9 @@
   }
   .traffic-note {
     font-size: 10px;
+  }
+  .traffic-skel-pill {
+    width: 150px;
+    height: 11px;
   }
 }

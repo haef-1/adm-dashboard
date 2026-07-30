@@ -28,6 +28,14 @@ const Charts = (() => {
   // ── Plugin: labels di tengah tiap segment + total di atas bar ──
   const VERT_THRESHOLD = 28; // bar width (px) below which labels go vertical
 
+  // Total digambar DI ATAS batang, di luar plot area. Chart.js merentangkan
+  // batang tertinggi sampai mepet tepi atas, jadi tanpa strip padding ini
+  // labelnya keluar kanvas dan terpotong — makin parah kalau salah satu hari
+  // nilainya jauh di atas yang lain. Angkanya: tinggi font maksimum (12) +
+  // jarak ke batang + sedikit sisa untuk ekor huruf.
+  const TOTAL_LABEL_GAP = 4;
+  const TOTAL_LABEL_PAD = 20;
+
   const stackedLabelsPlugin = {
     id: 'stackedBarLabels',
     afterDatasetsDraw(chart) {
@@ -92,12 +100,16 @@ const Charts = (() => {
         const bar0 = meta0.data[bi];
         if (!bar0) return;
         const { x } = bar0.getProps(['x'], true);
+        // Jaring pengaman kalau strip padding-nya kurang (mis. font ikut
+        // membesar): baseline 'bottom' berarti huruf menempati [ty-fontSize, ty],
+        // jadi ty tidak boleh lebih kecil dari tinggi fontnya sendiri.
+        const ty = Math.max(topY - TOTAL_LABEL_GAP, fontSize + 1);
         ctx.save();
         ctx.font = `700 ${fontSize}px 'JetBrains Mono'`;
         ctx.fillStyle = '#4a4f6a';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'bottom';
-        ctx.fillText(KPI.fmtShort(total), x, topY - 4);
+        ctx.fillText(KPI.fmtShort(total), x, ty);
         ctx.restore();
       });
     },
@@ -235,6 +247,8 @@ const Charts = (() => {
         responsive: true,
         maintainAspectRatio: false,
         animation: { duration: 600, easing: 'easeInOutQuart' },
+        // Strip kosong untuk label total di atas batang tertinggi.
+        layout: { padding: { top: TOTAL_LABEL_PAD } },
         plugins: {
           legend: { display: false },
           tooltip: { enabled: false },
