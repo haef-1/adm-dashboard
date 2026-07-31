@@ -273,6 +273,33 @@
   min-width: 0;
 }
 
+/* Saat matriks Material × Jam terbuka, 50% terlalu sempit untuk 24 kolom.
+   Hanya di desktop porsinya digeser jadi 70/30 — sisa 30% masih cukup untuk
+   Search Material. Transisinya juga desktop-only: di bawah sini jumlah
+   kolomnya yang berubah (2 → 1), dan itu tidak bisa dianimasikan. */
+@media (min-width: 1021px) {
+  #sectionTrafficSearch .section-split {
+    transition: grid-template-columns 0.28s ease;
+  }
+  #sectionTrafficSearch.detail-open .section-split {
+    grid-template-columns: 7fr 3fr;
+  }
+}
+
+/* Tablet & mobile: 30% tinggal ±200px, terlalu sempit untuk Search Material
+   dan matriksnya pun masih sesak. Jadi begitu detail dibuka panelnya
+   menumpuk — matriks selebar layar penuh, Search Material turun ke bawah. */
+@media (max-width: 1020px) {
+  #sectionTrafficSearch.detail-open .section-split {
+    grid-template-columns: 1fr;
+  }
+  /* Pemisah pindah dari kanan ke bawah, sama seperti saat menumpuk di HP. */
+  #sectionTrafficSearch.detail-open .section-split > *:first-child {
+    border-right: none;
+    border-bottom: 1px solid var(--border-light);
+  }
+}
+
 /* Judul berdiri sendiri di baris atas, filter turun ke baris bawah dan
    rata kanan — bukan berdampingan dengan judul seperti panel lain. */
 #searchPanel .split-panel-header {
@@ -2987,6 +3014,55 @@
   gap: 10px;
 }
 
+/* Judul di kiri, tombol "Detail data" rata kanan di baris atas. */
+.traffic-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.traffic-title-row .split-panel-title {
+  min-width: 0;
+}
+
+.traffic-detail-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  padding: 3px 9px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text-mid);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.6;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.traffic-detail-btn:hover {
+  background: var(--bg);
+  color: var(--text);
+  border-color: var(--text-muted);
+}
+
+/* Lebar tetap supaya "+" dan "−" menempati ruang yang sama — teks di
+   sebelahnya tidak bergeser saat tombol ditekan. */
+.traffic-detail-sign {
+  display: inline-block;
+  width: 8px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+}
+
 /* nowrap menjaga toggle dan navigasi tanggal tetap berdampingan di semua
    ukuran layar, tidak pernah menumpuk. */
 .traffic-header-controls {
@@ -2995,6 +3071,41 @@
   justify-content: flex-end;
   gap: 8px;
   flex-wrap: nowrap;
+}
+
+/* Mode detail: tanggal pindah ke kiri (toggle BRD/KG menyusul di kanannya),
+   ringkasan + grafik disembunyikan dan digantikan matriks Material × Jam.
+   Elemen kontrolnya tetap yang sama — satu tanggal, satu metrik, dipakai
+   bergantian oleh dua tampilan. */
+#trafficBody.detail-open .traffic-header-controls {
+  justify-content: flex-start;
+}
+
+#trafficBody.detail-open #trafficDateNav {
+  order: -1;
+}
+
+#trafficBody.detail-open #trafficSummary,
+#trafficBody.detail-open #trafficWrap {
+  display: none;
+}
+
+/* "Map dept color" hanya berlaku untuk matriks, jadi ikut hilang bersama
+   tampilan grafik. */
+.traffic-dept-btn {
+  display: none;
+}
+
+#trafficBody.detail-open .traffic-dept-btn {
+  display: inline-flex;
+}
+
+/* Aktif — dibedakan dengan warna aksen, bukan cuma tebal, karena tombolnya
+   berdampingan dengan toggle BRD/KG yang juga punya keadaan aktif. */
+.traffic-dept-btn.is-open {
+  background: var(--blue-light);
+  border-color: var(--blue-mid);
+  color: var(--blue);
 }
 
 .traffic-summary {
@@ -3014,6 +3125,237 @@
 .traffic-note {
   font-size: 11px;
   color: var(--text-muted);
+}
+
+/* ── Matriks Material × Jam ──
+   24 kolom jam tidak muat selebar panel, jadi tabelnya digulir MENDATAR saja
+   dengan kolom Material dipaku (sticky) di kiri dan kolom Total di kanan —
+   kedua ujung baris tetap terbaca sejauh apa pun digulir.
+   Ke bawah tidak pernah digulir: tingginya dibiarkan mengikuti isi supaya
+   semua material tampil sekaligus. */
+.traffic-detail {
+  padding: 2px 0 4px;
+}
+
+/* Legenda warna departemen — tanpa ini arsirannya tidak berarti apa-apa.
+   Ikut muncul dan hilang bersama tombol "Map dept color". */
+.traffic-dept-legend {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 0 2px 8px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-soft);
+}
+
+/* Tiap item legend juga saklar on/off departemennya. */
+.traffic-dept-legend .tdl-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 7px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.traffic-dept-legend .tdl-item:hover {
+  border-color: var(--border);
+  background: var(--surface-alt);
+}
+
+/* Dimatikan: warnanya dipudarkan dan teksnya dicoret tipis, jadi bedanya
+   kelihatan tanpa harus membandingkan dengan item sebelahnya. */
+.traffic-dept-legend .tdl-item.is-off {
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+
+.traffic-dept-legend .tdl-item.is-off i {
+  opacity: 0.25;
+}
+
+.traffic-dept-legend i {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.traffic-detail-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.traffic-detail-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  width: max-content;
+  min-width: 100%;
+  font-size: 10px;
+}
+
+.traffic-detail-table th,
+.traffic-detail-table td {
+  padding: 5px 7px;
+  border-bottom: 1px solid var(--border-light);
+  border-right: 1px solid var(--border-light);
+  white-space: nowrap;
+}
+
+/* Kolom terakhir menempel ke bingkai pembungkus — garisnya akan dobel.
+   Batas ke kolom Total sendiri sudah digambar lewat border-left-nya. */
+.traffic-detail-table tr > :last-child {
+  border-right: none;
+}
+
+/* Latar pink dipakai seluruh sel header — termasuk sudut Material dan Total
+   yang dipaku (sticky), jadi warnanya tetap utuh saat kolom jam lewat di
+   belakangnya. */
+.traffic-detail-table thead th {
+  /* Satu tingkat di antara --pink-light dan --pink: cukup pekat untuk
+     terbaca sebagai pink, teksnya ikut digelapkan ke --text-mid supaya
+     kontrasnya tetap aman untuk huruf 10px. */
+  background: #fbcfe8;
+  color: var(--text-mid);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid var(--border);
+  z-index: 2;
+}
+
+.traffic-detail-table .tdt-group {
+  padding: 4px 7px;
+  line-height: 15px;
+  text-align: center;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.traffic-detail-table .tdt-hours th {
+  font-family: var(--font-mono);
+  text-transform: none;
+  letter-spacing: -0.02em;
+  text-align: right;
+}
+
+/* Header kolom Material & Total ikut dipaku mendatar, sebaris dengan kolom
+   di bawahnya — z-index di atas header jam yang lewat di belakangnya. */
+.traffic-detail-table .tdt-corner {
+  position: sticky;
+  left: 0;
+  text-align: left;
+  /* Sekat kolom Material lebih tegas dari sekat antar jam, sejajar dengan
+     border-right sel material di bawahnya. */
+  border-right: 1px solid var(--border);
+  z-index: 3;
+}
+
+.traffic-detail-table .tdt-total-head {
+  position: sticky;
+  right: 0;
+  text-align: right;
+  border-left: 1px solid var(--border);
+  z-index: 3;
+}
+
+.traffic-detail-table tbody th {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--surface);
+  text-align: left;
+  font-weight: 600;
+  color: var(--text);
+  border-right: 1px solid var(--border);
+}
+
+/* Angkanya tebal semua. Kolom/baris Total tetap menonjol lewat warna
+   (var(--text) vs --text-mid), bukan lewat ketebalan. */
+.traffic-detail-table tbody td {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  text-align: right;
+  color: var(--text-mid);
+  letter-spacing: -0.02em;
+}
+
+/* Kolom Total dipaku di kanan — pasangan kolom Material di kiri, jadi kedua
+   ujung baris tetap terbaca selagi 24 kolom jam digulir di antaranya. */
+.traffic-detail-table tbody .tdt-total {
+  position: sticky;
+  right: 0;
+  z-index: 1;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  font-weight: 700;
+  color: var(--text);
+}
+
+/* background-color, bukan shorthand: arsiran departemen dan arsiran sel-nol
+   ada di background-image dan tidak boleh ikut terhapus saat baris di-hover. */
+.traffic-detail-table tbody tr:hover th,
+.traffic-detail-table tbody tr:hover td {
+  background-color: var(--blue-light);
+}
+
+/* Baris Total per jam — latarnya senada header supaya terbaca sebagai
+   penutup tabel, bukan sebagai baris material biasa. */
+.traffic-detail-table tfoot th,
+.traffic-detail-table tfoot td {
+  background: var(--surface-alt);
+  border-top: 1px solid var(--border);
+  border-bottom: none;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.traffic-detail-table tfoot td {
+  font-family: var(--font-mono);
+  text-align: right;
+  letter-spacing: -0.02em;
+}
+
+.traffic-detail-table tfoot th {
+  position: sticky;
+  left: 0;
+  text-align: left;
+  border-right: 1px solid var(--border);
+  z-index: 3;
+}
+
+.traffic-detail-table tfoot .tdt-total {
+  position: sticky;
+  right: 0;
+  border-left: 1px solid var(--border);
+  z-index: 3;
+}
+
+.traffic-detail-table tbody tr:last-child th,
+.traffic-detail-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* Jam tanpa transfer: sel kosong, hanya diberi arsiran samar supaya polanya
+   tetap terbaca sebagai "tidak ada", bukan sebagai kolom yang hilang.
+   Sengaja background-image, bukan shorthand: sel Total dan baris Total ikut
+   dipaku (sticky) dan warna latarnya harus tetap utuh — kalau tertimpa jadi
+   transparan, isi tabel akan kelihatan menembusnya saat digulir. */
+.traffic-detail-table td.is-zero {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    transparent 0 3px,
+    var(--border-light) 3px 4px
+  );
 }
 
 /* ── Skeleton grafik traffic ──

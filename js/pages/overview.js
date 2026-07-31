@@ -34,6 +34,8 @@ const OverviewPage = (() => {
   let _trafficActive = -1; // batang yang sedang ditunjuk (-1 = tidak ada)
   let _trafficPinned = false; // true kalau dikunci lewat klik
   let _trafficDefault = -1; // jam terpadat — posisi label saat tidak di-hover
+  let trafficDetailOpen = false; // matriks Material × Jam menggantikan grafik
+  let trafficDeptMap = false; // arsir warna departemen tujuan di tiap sel
 
   // ── Main render ──
   function render(container) {
@@ -93,13 +95,23 @@ const OverviewPage = (() => {
                  di bawah grafik. -->
             <div id="trafficBody">
               <div class="split-panel-header">
-                <div class="split-panel-title">Trafic Bahan Karkas</div>
+                <div class="traffic-title-row">
+                  <div class="split-panel-title">Trafic Bahan Karkas</div>
+                  <button type="button" class="traffic-detail-btn" id="trafficDetailBtn" aria-expanded="false">
+                    <span class="traffic-detail-sign" id="trafficDetailSign" aria-hidden="true">+</span>
+                    <span id="trafficDetailLabel">Detail data</span>
+                  </button>
+                </div>
                 <div class="traffic-header-controls">
                   <div class="toggle-group" id="trafficToggle">
                     <button class="toggle-btn active" data-metric="brd">BRD</button>
                     <button class="toggle-btn" data-metric="kg">KG</button>
                   </div>
                   <div id="trafficDateNav"></div>
+                  <!-- Hanya muncul di mode detail (disembunyikan lewat CSS). -->
+                  <button type="button" class="traffic-detail-btn traffic-dept-btn" id="trafficDeptBtn" aria-pressed="false">
+                    Map dept color
+                  </button>
                 </div>
               </div>
               <div class="traffic-summary" id="trafficSummary">
@@ -109,6 +121,11 @@ const OverviewPage = (() => {
                 <canvas id="trafficChart"></canvas>
                 <div class="traffic-skel" id="trafficSkeleton">${TRAFFIC_SKELETON}</div>
               </div>
+              <!-- Tampilan detail: matriks Material × Jam. Menggantikan
+                   ringkasan + grafik saat tombol "Detail data" ditekan;
+                   navigasi tanggal dan toggle BRD/KG di atasnya tetap yang
+                   sama, hanya ditukar urutannya lewat CSS. -->
+              <div class="traffic-detail" id="trafficDetail" hidden></div>
             </div>
           </div>
           <!-- Kanan: Search Material -->
@@ -1184,6 +1201,8 @@ const OverviewPage = (() => {
       });
     });
 
+    initTrafficDetailToggle();
+
     const nav = DatePicker.createDateNav({
       initialDate: trafficDate,
       onPrev: () => stepTrafficDate(-1),
@@ -1207,6 +1226,78 @@ const OverviewPage = (() => {
     nav.setNextEnabled(false);
 
     loadTrafficInitial();
+  }
+
+  // Tombol "Detail data" / "Collapse data" di samping judul. Dua tampilan
+  // (grafik dan matriks) berbagi satu tanggal + satu metrik, jadi tombolnya
+  // cukup membalik state lalu menyerahkan sisanya ke renderTrafficChart.
+  function initTrafficDetailToggle() {
+    const btn = document.getElementById("trafficDetailBtn");
+    if (!btn) return;
+
+    btn.addEventListener("click", () => {
+      trafficDetailOpen = !trafficDetailOpen;
+      applyTrafficDetailState();
+      renderTrafficChart();
+    });
+
+    // Arsiran departemen cuma soal tampilan — datanya sudah ada di tangan,
+    // jadi tabelnya digambar ulang seketika tanpa menyentuh jaringan lagi.
+    document.getElementById("trafficDeptBtn")?.addEventListener("click", () => {
+      trafficDeptMap = !trafficDeptMap;
+      applyTrafficDetailState();
+      redrawTrafficDetail();
+    });
+
+    // Legendanya lahir ulang tiap tabel digambar, jadi kliknya ditangkap di
+    // wadahnya — satu listener yang tidak perlu dipasang ulang.
+    document.getElementById("trafficDetail")?.addEventListener("click", (e) => {
+      const item = e.target.closest(".tdl-item");
+      if (!item) return;
+      const code = item.dataset.dept;
+      if (trafficDeptSel.has(code)) trafficDeptSel.delete(code);
+      else trafficDeptSel.add(code);
+      redrawTrafficDetail();
+    });
+
+    // Overview di-render ulang tiap kali halamannya dibuka, markup-nya selalu
+    // lahir dalam keadaan tertutup — samakan dengan state yang masih hidup.
+    applyTrafficDetailState();
+  }
+
+  function applyTrafficDetailState() {
+    const btn = document.getElementById("trafficDetailBtn");
+    if (btn) {
+      btn.classList.toggle("is-open", trafficDetailOpen);
+      btn.setAttribute("aria-expanded", String(trafficDetailOpen));
+      const sign = document.getElementById("trafficDetailSign");
+      const label = document.getElementById("trafficDetailLabel");
+      if (sign) sign.textContent = trafficDetailOpen ? "−" : "+";
+      if (label) {
+        label.textContent = trafficDetailOpen ? "Collapse data" : "Detail data";
+      }
+    }
+    const deptBtn = document.getElementById("trafficDeptBtn");
+    if (deptBtn) {
+      deptBtn.classList.toggle("is-open", trafficDeptMap);
+      deptBtn.setAttribute("aria-pressed", String(trafficDeptMap));
+    }
+    document
+      .getElementById("trafficBody")
+      ?.classList.toggle("detail-open", trafficDetailOpen);
+    // Matriks 24 jam butuh ruang lebih dari separuh baris: kelasnya ikut
+    // dipasang di section supaya pembagian kolomnya bisa digeser ke 70/30.
+    document
+      .getElementById("sectionTrafficSearch")
+      ?.classList.toggle("detail-open", trafficDetailOpen);
+    const detail = document.getElementById("trafficDetail");
+    if (!detail) return;
+    detail.hidden = !trafficDetailOpen;
+    // Dibuka sebelum ringkasan harian sampai dari jaringan: jangan tinggalkan
+    // kotak kosong — renderTrafficDetail menimpanya begitu tanggalnya siap.
+    if (trafficDetailOpen && !detail.innerHTML) {
+      detail.innerHTML = `<div class="traffic-note">memuat rincian material…</div>`;
+    }
   }
 
   async function loadTrafficInitial() {
@@ -1340,8 +1431,214 @@ const OverviewPage = (() => {
     _trafficNav?.setPrevEnabled(idx > 0);
     _trafficNav?.setNextEnabled(idx >= 0 && idx < trafficDates.length - 1);
 
+    // Panel detail menggantikan ringkasan + grafik. Chart-nya sengaja tidak
+    // digambar selagi tersembunyi (lebarnya 0 → Chart.js salah ukur); saat
+    // kembali ke tampilan grafik, drawTrafficChart membuatnya dari awal.
+    if (trafficDetailOpen) {
+      renderTrafficDetail();
+      return;
+    }
+
     renderTrafficSummary(day, ym);
     drawTrafficChart(day, avg);
+  }
+
+  // ══════════════════════════════════════
+  // Detail: matriks Material × Jam untuk satu tanggal
+  // ══════════════════════════════════════
+
+  // "KARKAS 1.2-1.3" → "K 1.2" — rentang cukup diwakili batas bawahnya, dan
+  // dengan 24 kolom jam kolom material harus sesempit mungkin. Bentuk yang
+  // bukan rentang angka ("KARKAS 1.6up dan 2.0up") dibiarkan utuh.
+  function shortKarkasLabel(md) {
+    const rest = String(md)
+      .trim()
+      .replace(/^KARKAS\s*/i, "")
+      .replace(/^(\d+(?:[.,]\d+)?)\s*-\s*\d+(?:[.,]\d+)?$/, "$1");
+    return ("K " + rest).trim();
+  }
+
+  // ── Peta warna departemen tujuan ──
+  // Kode dept-nya dibiarkan mentah di data (lihat catatan di TTA import),
+  // jadi pemetaan ke nama dan warna dilakukan di sini. Urutannya menentukan
+  // slot arsiran: tiap departemen selalu menempati garis yang sama, jadi
+  // sel yang berisi dua departemen terbaca sebagai dua warna bertumpuk,
+  // bukan sebagai pola baru.
+  const TRAFFIC_DEPTS = [
+    { code: "103B", label: "Cut Up", color: "var(--dept-cutup)" },
+    { code: "103C", label: "Parting", color: "var(--dept-parting)" },
+    { code: "103D", label: "Boneless", color: "var(--dept-boneless)" },
+    { code: "103F", label: "AU", color: "var(--dept-au)" },
+  ];
+
+  // Departemen yang arsirannya sedang ditampilkan. Mulai dari semua menyala,
+  // jadi menekan "Map dept color" langsung memperlihatkan peta yang utuh —
+  // legendanya baru dipakai kalau ingin menyisihkan sebagian.
+  const trafficDeptSel = new Set(TRAFFIC_DEPTS.map((d) => d.code));
+
+  // Nilai "Departement Tujuan" datang apa adanya dari Excel — kadang cuma
+  // "103B", kadang ada embel-embel nama. Kode 103x-nya yang dipakai.
+  function deptCode(raw) {
+    const m = /103[A-K]/.exec(String(raw || "").toUpperCase());
+    return m ? m[0] : "";
+  }
+
+  // Satu periode 8px dibagi jadi empat slot berjarak 2px; tiap departemen
+  // selalu memakai slot yang sama, jadi arsiran dua departemen saling
+  // menyilang tanpa menutupi. Garisnya sendiri tipis (1px) — cukup untuk
+  // menandai warna tanpa mengganggu angka di atasnya.
+  // Perapatan periode inilah yang mengatur banyak garis per sel: 8px memberi
+  // kira-kira satu garis lebih banyak per sel dibanding 10px.
+  const HATCH_PERIOD = 8;
+  const HATCH_SLOT = 2;
+  const HATCH_W = 1;
+
+  function deptHatch(codes) {
+    if (!codes || !codes.length) return "";
+    const set = new Set(codes.map(deptCode));
+    const layers = TRAFFIC_DEPTS.filter(
+      (d) => set.has(d.code) && trafficDeptSel.has(d.code),
+    ).map((d) => {
+      const off = TRAFFIC_DEPTS.indexOf(d) * HATCH_SLOT;
+      return (
+        `repeating-linear-gradient(45deg,` +
+        `transparent 0 ${off}px,` +
+        `${d.color} ${off}px ${off + HATCH_W}px,` +
+        `transparent ${off + HATCH_W}px ${HATCH_PERIOD}px)`
+      );
+    });
+    return layers.join(",");
+  }
+
+  // Legendanya sekaligus jadi saklar: tiap departemen bisa dimatikan sendiri
+  // supaya sel yang berisi banyak departemen lebih mudah dibaca.
+  function trafficDeptLegend() {
+    const items = TRAFFIC_DEPTS.map((d) => {
+      const on = trafficDeptSel.has(d.code);
+      return (
+        `<button type="button" class="tdl-item${on ? "" : " is-off"}"` +
+        ` data-dept="${d.code}" aria-pressed="${on}">` +
+        `<i style="background:${d.color}"></i>${d.label}</button>`
+      );
+    }).join("");
+    return `<div class="traffic-dept-legend">${items}</div>`;
+  }
+
+  // Rincian per material datang dari baris mentah (lihat TTATraffic
+  // .getDayDetail), jadi bisa lambat di bulan yang belum pernah dibuka.
+  // Nomor request menjaga hasil unduhan lama tidak menimpa tanggal terbaru
+  // kalau ‹ › ditekan cepat.
+  let _trafficDetailReq = 0;
+
+  // Baris tanggal yang sedang tampil, disimpan supaya tombol "Map dept color"
+  // bisa menggambar ulang tabel seketika tanpa menunggu promise lagi.
+  let _trafficDetailRows = null;
+  let _trafficDetailRowsDate = "";
+
+  async function renderTrafficDetail() {
+    const el = document.getElementById("trafficDetail");
+    if (!el || !trafficDate) return;
+
+    const req = ++_trafficDetailReq;
+    el.innerHTML = `<div class="traffic-note">memuat rincian material…</div>`;
+
+    let rows;
+    try {
+      rows = await TTATraffic.getDayDetail(trafficDate);
+    } catch (err) {
+      console.error("[Traffic] gagal memuat rincian material:", err);
+      if (req === _trafficDetailReq) {
+        el.innerHTML = `<div class="traffic-note">Gagal memuat rincian material</div>`;
+      }
+      return;
+    }
+
+    if (req !== _trafficDetailReq || !trafficDetailOpen) return;
+    _trafficDetailRows = rows;
+    _trafficDetailRowsDate = trafficDate;
+    el.innerHTML = trafficDetailTable(rows);
+  }
+
+  // Menggambar ulang tabel dari baris yang sudah di tangan. Dipakai perubahan
+  // yang murni tampilan (arsiran dept, pilihan legend) — tidak perlu menunggu
+  // promise dan tidak memunculkan "memuat rincian…" yang berkedip.
+  function redrawTrafficDetail() {
+    const el = document.getElementById("trafficDetail");
+    if (el && _trafficDetailRows && _trafficDetailRowsDate === trafficDate) {
+      el.innerHTML = trafficDetailTable(_trafficDetailRows);
+    } else {
+      renderTrafficDetail();
+    }
+  }
+
+  function trafficDetailTable(rows) {
+    if (!rows.length) {
+      return `<div class="traffic-note">Tidak ada transfer karkas di tanggal ini</div>`;
+    }
+
+    const mi = trafficMetricIdx();
+    const hourHead = TRAFFIC_HOURS.map((h) => `<th>${pad2h(h)}</th>`).join("");
+
+    // Jam tanpa transfer dikosongkan, bukan diisi "0" — dalam matriks 24 kolom
+    // deretan nol menenggelamkan angka yang berarti.
+    // Angkanya ditulis polos tanpa pemisah ribuan: di 26 kolom yang berdesakan
+    // titik pemisah cuma menambah lebar dan bikin kolom makin ramai.
+    const cell = (v, cls, hatch) => {
+      if (!v) return `<td class="is-zero${cls ? " " + cls : ""}"></td>`;
+      const attrs =
+        (cls ? ` class="${cls}"` : "") +
+        (hatch ? ` style="background-image:${hatch}"` : "");
+      return `<td${attrs}>${Math.round(v)}</td>`;
+    };
+
+    // Total per jam (baris bawah) dijumlahkan dari angka yang sama persis
+    // dengan yang tampil di sel — jadi tiap total selalu cocok kalau
+    // dijumlahkan sendiri oleh pembacanya, tanpa selisih pembulatan.
+    const hourTotal = new Array(24).fill(0);
+    let grand = 0;
+
+    const body = rows
+      .map((r) => {
+        let rowTotal = 0;
+        const cells = TRAFFIC_HOURS.map((h) => {
+          const v = r.hours[mi][h];
+          rowTotal += v;
+          hourTotal[h] += v;
+          return cell(v, "", trafficDeptMap ? deptHatch(r.dept?.[h]) : "");
+        }).join("");
+        grand += rowTotal;
+        return (
+          `<tr><th scope="row">${shortKarkasLabel(r.md)}</th>${cells}` +
+          cell(rowTotal, "tdt-total") +
+          `</tr>`
+        );
+      })
+      .join("");
+
+    const footCells = TRAFFIC_HOURS.map((h) => cell(hourTotal[h])).join("");
+
+    return `
+      ${trafficDeptMap ? trafficDeptLegend() : ""}
+      <div class="traffic-detail-scroll">
+        <table class="traffic-detail-table">
+          <thead>
+            <tr>
+              <th class="tdt-corner" rowspan="2" scope="col">Material</th>
+              <th class="tdt-group" colspan="${TRAFFIC_HOURS.length}" scope="colgroup">Jam</th>
+              <th class="tdt-total-head" rowspan="2" scope="col">Total</th>
+            </tr>
+            <tr class="tdt-hours">${hourHead}</tr>
+          </thead>
+          <tbody>${body}</tbody>
+          <tfoot>
+            <tr>
+              <th scope="row">Total</th>
+              ${footCells}
+              ${cell(grand, "tdt-total")}
+            </tr>
+          </tfoot>
+        </table>
+      </div>`;
   }
 
   function renderTrafficSummary(day, ym) {
@@ -1374,6 +1671,12 @@ const OverviewPage = (() => {
     hideTrafficSkeleton();
     const el = document.getElementById("trafficSummary");
     if (el) el.innerHTML = `<span class="traffic-note">${msg}</span>`;
+    // Panel detail menutupi ringkasan di atas, jadi pesannya harus ikut ke
+    // sana — kalau tidak, yang terlihat cuma "memuat…" yang tidak pernah usai.
+    const detail = document.getElementById("trafficDetail");
+    if (detail && trafficDetailOpen) {
+      detail.innerHTML = `<div class="traffic-note">${msg}</div>`;
+    }
     _trafficNav?.setLabel("—");
     _trafficNav?.setPrevEnabled(false);
     _trafficNav?.setNextEnabled(false);
@@ -1396,8 +1699,15 @@ const OverviewPage = (() => {
 
     // Tanpa hover pun label sudah menempel di jam terpadat, dan ke sinilah
     // label kembali setiap kursor meninggalkan batang.
+    //
+    // Kuncian dari klik sebelumnya sengaja dilepas di sini: fungsi ini hanya
+    // dipanggil saat datanya benar-benar berganti (ganti tanggal, ganti
+    // BRD/KG, atau kembali dari tampilan detail), sementara hover dan klik
+    // cuma memanggil chart.draw(). Kalau tidak dilepas, label tetap terkunci
+    // di jam pilihan tanggal lama — jam terpadat tanggal baru tidak ditandai.
+    _trafficPinned = false;
     _trafficDefault = peak >= 0 ? TRAFFIC_HOURS.indexOf(peak) : -1;
-    if (!_trafficPinned) _trafficActive = _trafficDefault;
+    _trafficActive = _trafficDefault;
 
     _trafficChart = new Chart(ctx, {
       type: "bar",

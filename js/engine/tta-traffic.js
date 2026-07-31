@@ -24,8 +24,9 @@ const TTATraffic = (() => {
   const MD_PREFIX = 'KARKAS';
 
   let _daysPromise = null;
+  const _detailMonths = new Map(); // 'YYYY-MM' → promise rincian per material
 
-  function _invalidate() { _daysPromise = null; }
+  function _invalidate() { _daysPromise = null; _detailMonths.clear(); }
 
   // ── Index kamus yang lolos filter ──
   function filterSets() {
@@ -107,6 +108,79 @@ const TTATraffic = (() => {
     return _daysPromise;
   }
 
+  // ── Rincian per material untuk satu tanggal ──
+  // Ringkasan harian sengaja TIDAK menyimpan pecahan per material: dengan
+  // belasan ukuran karkas payload-nya ikut naik belasan kali lipat, padahal
+  // hanya dibutuhkan saat panel detail dibuka. Jadi baris mentah satu bulan
+  // (±1 MB) diunduh sesuai kebutuhan, dipecah untuk SELURUH tanggal di bulan
+  // itu sekaligus, lalu barisnya dibuang — menekan ‹ › dalam bulan yang sama
+  // tidak menyentuh jaringan lagi.
+  function detailFromRows(rows, sets) {
+    const F = TTAEngine.F;
+    const L = TTAEngine.getLookups();
+    const MD = L.md || [];
+    const DEPT = L.dept || [];
+    const days = {};
+
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i];
+      if (!sets.pvOk.has(r[F.PV]) || !sets.mdOk.has(r[F.MD])) continue;
+      const d = r[F.DATE];
+      let rec = days[d];
+      if (!rec) rec = days[d] = new Map();
+      let cell = rec.get(r[F.MD]);
+      if (!cell) {
+        rec.set(r[F.MD], (cell = {
+          ekor: new Array(24).fill(0),
+          kg: new Array(24).fill(0),
+          // Satu sel bisa berisi transfer ke beberapa departemen sekaligus,
+          // jadi tujuannya dikumpulkan sebagai himpunan per jam.
+          dept: new Array(24),
+        }));
+      }
+      const h = r[F.HOUR];
+      cell.ekor[h] += r[F.EKOR];
+      cell.kg[h] += r[F.KG];
+      if (r[F.TUJUAN] !== -1) {
+        (cell.dept[h] || (cell.dept[h] = new Set())).add(r[F.TUJUAN]);
+      }
+    }
+
+    // Map → array terurut ukuran karkas ("KARKAS 1.2-1.3" → 1.2), supaya
+    // barisnya membaca dari yang paling ringan ke yang paling berat.
+    const out = {};
+    for (const d in days) {
+      out[d] = [...days[d].entries()]
+        .map(([mdIdx, cell]) => ({
+          md: MD[mdIdx],
+          hours: [cell.ekor, cell.kg.map(v => Math.round(v))],
+          dept: cell.dept.map(s => (s ? [...s].map(i => DEPT[i]) : null)),
+        }))
+        .sort((a, b) => {
+          const na = parseFloat(String(a.md).replace(/[^\d.]/g, ' ').trim());
+          const nb = parseFloat(String(b.md).replace(/[^\d.]/g, ' ').trim());
+          if (isFinite(na) && isFinite(nb) && na !== nb) return na - nb;
+          return String(a.md).localeCompare(String(b.md), 'id');
+        });
+    }
+    return out;
+  }
+
+  // → [{ md, hours: [[24 ekor], [24 kg]] }], kosong kalau tanggalnya nihil.
+  function getDayDetail(date) {
+    const ym = String(date).slice(0, 7);
+    let p = _detailMonths.get(ym);
+    if (!p) {
+      p = (async () => {
+        await TTADB.ensureLookups();
+        const rows = await TTADB.loadMonth(ym);
+        return detailFromRows(rows, filterSets());
+      })().catch(err => { _detailMonths.delete(ym); throw err; });
+      _detailMonths.set(ym, p);
+    }
+    return p.then(days => days[date] || []);
+  }
+
   // ── Dipanggil setelah import: timpa hanya tanggal yang baru masuk ──
   // Import mengganti satu tanggal secara utuh, jadi menghitung ulang ember
   // tanggal itu dari baris yang baru saja diimpor sudah pasti benar —
@@ -138,5 +212,8 @@ const TTATraffic = (() => {
     }
   }
 
-  return { FILTER_ID, getDays, rebuild, applyImportedRows, filterSets, bucketsFromRows, _invalidate };
+  return {
+    FILTER_ID, getDays, getDayDetail, rebuild, applyImportedRows,
+    filterSets, bucketsFromRows, detailFromRows, _invalidate,
+  };
 })();
