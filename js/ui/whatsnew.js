@@ -6,7 +6,8 @@
    melewati jalur ini, jadi tidak perlu ditebak-tebak di sini.
 
    Alurnya:
-     modal  →  [Lihat fiturnya]  →  spotlight ke panel terkait  →  [Selesai]
+     modal  →  [Lihat fiturnya]  →  spotlight ke panel terkait
+            →  [Next] … langkah berikutnya …  →  [Selesai]
 
    Muncul SETIAP login baru selama rilis teratas masih yang itu — sengaja
    tidak disimpan "sudah pernah dilihat", supaya pengumumannya tidak terlewat
@@ -15,7 +16,12 @@
    Cara menambah catatan rilis baru: tambahkan entri di paling ATAS array
    RELEASES. Itu saja — entri teratas otomatis jadi yang ditampilkan.
 
-   `spotlight` diisi id elemen yang mau disorot (opsional).
+   `spotlight` diisi id elemen yang mau disorot (opsional). Untuk panduan
+   berlangkah, pakai `steps: [{ spotlight, note, action }]` — tombolnya jadi
+   "Next" sampai langkah terakhir, baru "Selesai". `action` (opsional) adalah
+   fungsi yang dijalankan sebelum langkahnya disorot, dipakai untuk membukakan
+   tampilan yang sedang dijelaskan; boleh async. Entri lama yang masih memakai
+   `spotlight` + `spotlightNote` tetap jalan — diperlakukan sebagai satu langkah.
    `page` diisi halaman tempat elemen itu berada — isinya sama persis dengan
    data-page / data-page-table di sidebar (index.html): "overview", "karkas",
    "karkas-table", dst. WAJIB diisi setiap kali `spotlight` dipakai: user bisa
@@ -28,6 +34,75 @@
 
 const WhatsNew = (() => {
   const RELEASES = [
+    {
+      id: "2026-07-31.1",
+      title: "Apa yang Baru",
+      subtitle: "Ada beberapa hal baru di panel Trafic Bahan Karkas",
+      page: "overview",
+      // Panduannya membukakan sendiri tiap tampilan yang dijelaskan, jadi user
+      // tinggal menekan Next dan melihat hasilnya — tidak perlu menebak tombol
+      // mana yang harus ditekan lebih dulu.
+      steps: [
+        {
+          spotlight: "trafficBody",
+          note: "Ini panel Trafic Bahan Karkas — coba geser jamnya, ganti tanggal, atau pilih BRD/KG. Tekan Next buat lihat yang baru.",
+          // Panduannya bisa diputar ulang, jadi mulai dari keadaan awal:
+          // tampilan grafik, arsiran departemen mati.
+          action: () => {
+            OverviewPage?.setTrafficDetail?.(false);
+            OverviewPage?.setTrafficDeptMap?.(false);
+          },
+        },
+        {
+          spotlight: "trafficDetailBtn",
+          note: 'Coba tombol ini. "+ Detail data" menukar grafik dengan rincian per material — tekan Next buat lanjutin.',
+        },
+        {
+          spotlight: "trafficDetail",
+          note: "Ini matriksnya: tiap baris satu ukuran karkas, tiap kolom satu jam. Navigasi tanggal dan pilihan BRD/KG di atas tetap bisa jalan di sini.",
+          action: () => OverviewPage?.setTrafficDetail?.(true),
+        },
+        {
+          spotlight: "tdtTotalRow",
+          note: "Baris Total menjumlahkan tiap jam, dan kolom Total di ujung kanan menjumlahkan tiap material sepanjang hari. Tekan Next buat lihat arsiran warna departemen tujuan.",
+        },
+        {
+          spotlight: "trafficDeptBtn",
+          note: '"Map dept color" mengarsir tiap sel dengan warna departemen tujuan. Sel yang dikirim ke lebih dari satu departemen diarsir bertumpuk, lihat tabelnya.',
+          action: () => OverviewPage?.setTrafficDeptMap?.(true),
+        },
+        {
+          spotlight: "trafficDeptLegend",
+          note: "Tiap warna di sini bisa diklik untuk dimatikan atau dinyalakan — berguna saat ingin memisahkan satu departemen dari sel yang isinya bertumpuk.",
+        },
+        {
+          // Sengaja TANPA action: matriksnya harus masih terbuka supaya
+          // tombolnya benar-benar terbaca "− Collapse data" saat disorot.
+          spotlight: "trafficDetailBtn",
+          note: 'Selagi matriksnya terbuka, tombol tadi berubah jadi "− Collapse data" — itu jalan kembali ke grafik. Tekan Next, saya tutupkan.',
+        },
+        {
+          spotlight: "trafficBody",
+          note: "Dan panelnya balik seperti semula. Selamat mencoba!",
+          // Panduannya ditutup di tampilan awal, bukan di tengah matriks yang
+          // masih terbuka dengan arsiran menyala.
+          action: () => {
+            OverviewPage?.setTrafficDetail?.(false);
+            OverviewPage?.setTrafficDeptMap?.(false);
+          },
+        },
+      ],
+      // Rinciannya sengaja tidak diurai di sini — biar tidak dibaca dua kali.
+      // Panduan langkah demi langkah di atas yang menjelaskannya sambil
+      // membukakan tampilannya.
+      items: [
+        {
+          icon: "📊",
+          title: "Trafic Bahan Karkas",
+          desc: "Grafik tta bahan karkas per jam. Kelihatan jam berapa tta bahan paling padat, lengkap dengan garis rata-rata bulan berjalan sebagai pembanding.",
+        },
+      ],
+    },
     {
       id: "2026-07-28.2",
       title: "Apa yang Baru",
@@ -65,7 +140,9 @@ const WhatsNew = (() => {
     const overlay = document.getElementById("whatsNewModal");
     if (!overlay) return null;
 
-    const nextLabel = rel.spotlight ? "Lihat fiturnya" : "Mengerti";
+    // Lewat _steps, bukan rel.spotlight langsung: rilis berlangkah memakai
+    // `steps` dan tidak punya `spotlight` sama sekali.
+    const nextLabel = _steps(rel).length ? "Lihat fiturnya" : "Mengerti";
 
     overlay.innerHTML = `
       <div class="whatsnew-modal" role="dialog" aria-labelledby="whatsNewTitle">
@@ -161,31 +238,52 @@ const WhatsNew = (() => {
     Navbar.navigateTo(page);
   }
 
+  // Entri lama cuma punya satu sorotan; diperlakukan sebagai panduan
+  // berlangkah yang kebetulan panjangnya satu.
+  function _steps(rel) {
+    if (rel.steps?.length) return rel.steps;
+    if (rel.spotlight) {
+      return [{ spotlight: rel.spotlight, note: rel.spotlightNote }];
+    }
+    return [];
+  }
+
   async function _showSpotlight(rel) {
     const layer = document.getElementById("whatsNewSpotlight");
-    _ensurePage(rel.page);
-    const target = await _waitFor(rel.spotlight, 6000);
-    if (!target || !layer) {
+    const steps = _steps(rel);
+    if (!layer || !steps.length) {
       finish();
       return;
     }
+    _ensurePage(rel.page);
 
     layer.innerHTML = `
       <div class="whatsnew-spot-hole" id="wnHole"></div>
       <div class="whatsnew-spot-caption" id="wnCaption">
-        <div class="whatsnew-spot-text">${rel.spotlightNote || ""}</div>
-        <button class="whatsnew-spot-btn" id="wnDone">Selesai</button>
+        <div class="whatsnew-spot-text" id="wnText"></div>
+        <div class="whatsnew-spot-actions">
+          <span class="whatsnew-spot-count" id="wnCount"></span>
+          <button class="whatsnew-spot-skip" id="wnSkip">Sudahi petunjuk</button>
+          <button class="whatsnew-spot-btn" id="wnDone">Next</button>
+        </div>
       </div>
     `;
 
     const hole = document.getElementById("wnHole");
     const caption = document.getElementById("wnCaption");
+    const textEl = document.getElementById("wnText");
+    const countEl = document.getElementById("wnCount");
+    const nextBtn = document.getElementById("wnDone");
+    const skipBtn = document.getElementById("wnSkip");
+
+    // Id yang sedang disorot — dibaca position() tiap kali mengukur ulang.
+    let current = steps[0].spotlight;
 
     function position() {
       // Sengaja dicari ulang tiap kali: halaman di-render ulang setelah
       // background load selesai, dan referensi lama jadi node terlepas
       // yang rect-nya nol.
-      const el = document.getElementById(rel.spotlight);
+      const el = document.getElementById(current);
       if (!el) return;
       const r = el.getBoundingClientRect();
       const pad = 6;
@@ -256,31 +354,98 @@ const WhatsNew = (() => {
       });
     }
 
-    scrollTargetIntoView(target);
-
     // Tunggu scroll halus selesai sebelum mengukur posisi akhirnya. Ukur ulang
     // beberapa kali sesudahnya: kalau _ensurePage baru saja pindah halaman,
     // datanya masih dimuat dan panelnya bisa berubah tinggi setelah lubang
-    // spotlight terlanjur digambar.
-    const timers = [420, 1100, 2000].map((ms, i) =>
-      setTimeout(() => {
-        _resetOuterScroll();
-        position();
-        if (i === 0) layer.classList.add("show");
-      }, ms),
-    );
+    // spotlight terlanjur digambar. Alasan yang sama berlaku antar langkah —
+    // action() bisa membuat tabel yang isinya baru selesai dihitung.
+    let timers = [];
+    function clearTimers() {
+      timers.forEach(clearTimeout);
+      timers = [];
+    }
+
+    function settle() {
+      clearTimers();
+      timers = [420, 1100, 2000].map((ms, i) =>
+        setTimeout(() => {
+          _resetOuterScroll();
+          position();
+          if (i === 0) layer.classList.add("show");
+        }, ms),
+      );
+    }
+
+    let idx = -1;
+    // Langkahnya bisa menunggu elemen yang belum jadi. Tanpa penjaga ini,
+    // klik Next kedua saat langkah pertama masih menunggu akan memakai idx
+    // yang belum sempat maju — langkahnya jalan di tempat.
+    let busy = false;
+
+    async function goTo(i) {
+      const step = steps[i];
+      busy = true;
+      clearTimers();
+
+      // Langkahnya sering menjelaskan tampilan yang belum terbuka — bukakan
+      // dulu, baru sasarannya dicari.
+      try {
+        await step.action?.();
+      } catch (err) {
+        console.warn("[WhatsNew] action langkah " + (i + 1) + " gagal:", err);
+      }
+
+      const el = await _waitFor(step.spotlight, 6000);
+      if (!el) {
+        console.warn(
+          `[WhatsNew] elemen "${step.spotlight}" tidak muncul — panduan dihentikan.`,
+        );
+        busy = false;
+        finish();
+        return;
+      }
+
+      busy = false;
+      idx = i;
+      current = step.spotlight;
+      textEl.textContent = step.note || "";
+      // Nomor langkah disembunyikan kalau cuma ada satu — tidak ada yang
+      // perlu dihitung.
+      countEl.textContent =
+        steps.length > 1 ? i + 1 + " / " + steps.length : "";
+      const last = i === steps.length - 1;
+      nextBtn.textContent = last ? "Selesai" : "Next";
+      // Di langkah terakhir "Selesai" sudah menutup panduan — dua tombol
+      // dengan akibat yang sama cuma bikin ragu.
+      skipBtn.hidden = last;
+
+      scrollTargetIntoView(el);
+      settle();
+    }
 
     window.addEventListener("resize", position);
     scroller?.addEventListener("scroll", position, { passive: true });
-    document.getElementById("wnDone")?.addEventListener("click", finish);
+    nextBtn.addEventListener("click", () => {
+      if (busy) return;
+      if (idx >= steps.length - 1) finish();
+      else goTo(idx + 1);
+    });
+
+    // Berhenti di tengah jalan. Tampilan panel dibiarkan apa adanya —
+    // langkah terakhir yang mengembalikannya ke grafik memang sengaja
+    // dilewati, jadi yang berhenti karena ingin langsung mencoba tidak
+    // kehilangan tampilan yang sedang dilihatnya.
+    skipBtn.addEventListener("click", finish);
 
     _cleanup = () => {
-      timers.forEach(clearTimeout);
+      clearTimers();
       window.removeEventListener("resize", position);
       scroller?.removeEventListener("scroll", position);
       layer.classList.remove("show");
       layer.innerHTML = "";
     };
+
+    goTo(0);
   }
 
   // ══════ Alur ══════
@@ -328,7 +493,7 @@ const WhatsNew = (() => {
 
       document.getElementById("whatsNewNext")?.addEventListener("click", () => {
         _hideModal();
-        if (rel.spotlight) _showSpotlight(rel);
+        if (_steps(rel).length) _showSpotlight(rel);
         else finish();
       });
 

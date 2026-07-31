@@ -2308,6 +2308,48 @@
   margin-bottom: 10px;
 }
 
+/* Nomor langkah di kiri, tombol lanjut di kanan — panduannya berlangkah,
+   jadi user perlu tahu masih ada berapa lagi sebelum menekan Next. */
+.whatsnew-spot-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.whatsnew-spot-count {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--whatsnew-fg-soft);
+  opacity: 0.7;
+  margin-right: auto;
+}
+
+/* Jalan keluar di tengah panduan. Sengaja tanpa latar supaya tidak bersaing
+   dengan tombol Next di sebelahnya — ini pilihan sekunder. */
+.whatsnew-spot-skip {
+  padding: 7px 10px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--whatsnew-fg-soft);
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  opacity: 0.75;
+  transition: opacity var(--transition);
+}
+
+.whatsnew-spot-skip:hover {
+  opacity: 1;
+  text-decoration: underline;
+}
+
+.whatsnew-spot-skip[hidden] {
+  display: none;
+}
+
 .whatsnew-spot-btn {
   padding: 7px 20px;
   border: none;
@@ -3076,9 +3118,20 @@
 /* Mode detail: tanggal pindah ke kiri (toggle BRD/KG menyusul di kanannya),
    ringkasan + grafik disembunyikan dan digantikan matriks Material × Jam.
    Elemen kontrolnya tetap yang sama — satu tanggal, satu metrik, dipakai
-   bergantian oleh dua tampilan. */
+   bergantian oleh dua tampilan.
+   Bedanya di sini kontrolnya jadi tiga kelompok, ditambah "Map dept color".
+   nowrap warisan tampilan grafik memaksa ketiganya tetap sebaris dan di
+   layar sempit mereka saling menindih — jadi khusus mode ini dibolehkan
+   turun baris. */
 #trafficBody.detail-open .traffic-header-controls {
   justify-content: flex-start;
+  flex-wrap: wrap;
+  row-gap: 8px;
+}
+
+/* Ikut menjaga: yang turun baris harus utuh, bukan gepeng lebih dulu. */
+#trafficBody.detail-open .traffic-header-controls > * {
+  flex-shrink: 0;
 }
 
 #trafficBody.detail-open #trafficDateNav {

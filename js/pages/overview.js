@@ -1521,7 +1521,8 @@ const OverviewPage = (() => {
         `<i style="background:${d.color}"></i>${d.label}</button>`
       );
     }).join("");
-    return `<div class="traffic-dept-legend">${items}</div>`;
+    // id dipakai panduan What's New sebagai sasaran sorotan.
+    return `<div class="traffic-dept-legend" id="trafficDeptLegend">${items}</div>`;
   }
 
   // Rincian per material datang dari baris mentah (lihat TTATraffic
@@ -1631,7 +1632,7 @@ const OverviewPage = (() => {
           </thead>
           <tbody>${body}</tbody>
           <tfoot>
-            <tr>
+            <tr id="tdtTotalRow">
               <th scope="row">Total</th>
               ${footCells}
               ${cell(grand, "tdt-total")}
@@ -3006,5 +3007,22 @@ const OverviewPage = (() => {
     renderBahanChart();
   }
 
-  return { render };
+  // Dipakai panduan What's New untuk membuka tampilan yang sedang dijelaskan.
+  // Lewat fungsi ini, bukan dengan mengklik tombolnya lewat skrip, supaya
+  // state dan tampilannya dijamin sinkron seperti klik user biasa.
+  function setTrafficDetail(open) {
+    if (trafficDetailOpen === open) return;
+    trafficDetailOpen = open;
+    applyTrafficDetailState();
+    renderTrafficChart();
+  }
+
+  function setTrafficDeptMap(on) {
+    if (trafficDeptMap === on) return;
+    trafficDeptMap = on;
+    applyTrafficDetailState();
+    redrawTrafficDetail();
+  }
+
+  return { render, setTrafficDetail, setTrafficDeptMap };
 })();
