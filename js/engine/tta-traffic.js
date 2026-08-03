@@ -206,9 +206,14 @@ const TTATraffic = (() => {
       Object.assign(days, fresh);
 
       await _save(days);
-      _invalidate();
     } catch (err) {
       console.warn('[TTATraffic] gagal memperbarui ringkasan:', err.message);
+    } finally {
+      // Di luar try: baris mentahnya sudah berubah apa pun nasib ringkasan di
+      // atas, jadi cache _detailMonths pasti basi. Jalur return awal (ringkasan
+      // belum pernah dibuat) dan jalur error dulu melewati ini dan meninggalkan
+      // rincian material bulan itu memakai angka sebelum import.
+      _invalidate();
     }
   }
 

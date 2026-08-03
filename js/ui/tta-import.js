@@ -161,6 +161,17 @@ const TTAImportUI = (() => {
       showOverlay('MEMPERBARUI RINGKASAN...');
       await TTATraffic.applyImportedRows(indexedRows);
 
+      // Panel Trafic Bahan Karkas yang sedang terbuka masih memegang ringkasan
+      // lama; import biasa memperbarui layar lewat App.loadFromDB(), jalur TTA
+      // tidak punya padanannya. Digambar ulang selagi overlay masih menutup
+      // layar supaya pergantian angkanya tidak terlihat berkedip.
+      // Kegagalan di sini tidak boleh membatalkan import yang sudah tersimpan.
+      try {
+        await OverviewPage?.refreshTraffic?.();
+      } catch (err) {
+        console.warn('[TTA Import] gagal menyegarkan panel trafic:', err);
+      }
+
       hideOverlay();
 
       const sortedDates = result.dates.slice().sort();

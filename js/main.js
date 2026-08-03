@@ -5,6 +5,18 @@
 const App = (() => {
   let _bgRunning = false;
 
+  // supabase-js memasang listener visibilitychange-nya sendiri: tiap tab
+  // kembali terlihat ia memulihkan/menyegarkan token, lalu menembakkan
+  // onAuthStateChange dengan session yang valid. Tanpa penjaga ini boot()
+  // ikut jalan lagi di situ — overlay "loading bentar.." muncul, seluruh
+  // bulan diunduh ulang, dan halaman dirender ulang sampai scroll serta
+  // filter yang sedang dipakai hilang. Event INITIAL_SESSION yang menyusul
+  // pendaftaran listener kena masalah yang sama.
+  //
+  // Penjaganya bukan "sekali seumur tab" tapi "sekali per sesi login":
+  // dilepas lagi saat session hilang, supaya login berikutnya tetap boot.
+  let _booted = false;
+
   async function init() {
     await DB.open();
 
@@ -22,6 +34,8 @@ const App = (() => {
       }
       Auth.onAuthChange((s) => {
         if (s) {
+          if (_booted) return;
+          _booted = true;
           Auth.showApp();
           Auth.startIdleWatch();
           showWelcome(s.user, false);
@@ -41,6 +55,7 @@ const App = (() => {
             })
             .catch(err => console.error('Boot failed:', err));
         } else {
+          _booted = false;
           Auth.stopIdleWatch();
           Auth.showLogin();
         }
@@ -51,12 +66,20 @@ const App = (() => {
     Auth.showApp();
     Auth.initLoginUI();
     showWelcome(session.user, true);
+    // Ditandai sebelum listener dipasang: sesi ini di-boot oleh init() di
+    // baris paling bawah, jadi tiap event auth yang datang setelahnya —
+    // INITIAL_SESSION maupun TOKEN_REFRESHED saat balik tab — tidak boleh
+    // memicu pemuatan kedua.
+    _booted = true;
     Auth.onAuthChange((s) => {
       if (s) {
+        if (_booted) return;
+        _booted = true;
         Auth.showApp();
         Auth.startIdleWatch();
         boot().catch(err => console.error('Boot failed:', err));
       } else {
+        _booted = false;
         Auth.stopIdleWatch();
         Auth.showLogin();
       }

@@ -1326,6 +1326,24 @@ const OverviewPage = (() => {
     }
   }
 
+  // Dipanggil setelah import TTA selesai. Panel ini memegang salinan
+  // ringkasannya sendiri di `trafficDays`, jadi mengosongkan cache di
+  // TTATraffic saja tidak cukup — tanpa ini angka yang tampil masih angka
+  // sebelum import sampai halaman dibuka ulang.
+  //
+  // Hanya panel trafic yang dimuat ulang, bukan seluruh halaman: `trafficDate`,
+  // pilihan BRD/KG, dan keadaan buka/tutup matriks sengaja dipertahankan
+  // supaya admin yang sedang memeriksa satu tanggal tidak dilempar kembali ke
+  // tanggal terakhir.
+  function refreshTraffic() {
+    // Halaman lain yang sedang terbuka: tidak ada yang perlu digambar. Cache
+    // TTATraffic sudah kosong, jadi kunjungan berikutnya mengambil yang baru.
+    if (!document.getElementById("trafficBody")) return;
+    _trafficDetailRows = null;
+    _trafficDetailRowsDate = "";
+    return loadTrafficInitial();
+  }
+
   function stepTrafficDate(dir) {
     const next = trafficDates[trafficDates.indexOf(trafficDate) + dir];
     if (!next) return;
@@ -1536,11 +1554,36 @@ const OverviewPage = (() => {
   let _trafficDetailRows = null;
   let _trafficDetailRowsDate = "";
 
+  // Matriks 24 kolom hampir selalu digulir mendatar, tapi tiap gambar ulang
+  // mengganti innerHTML — elemen penggulungnya ikut lahir baru dan posisinya
+  // balik ke kolom paling kiri. Dua fungsi kecil ini menjaga jam yang sedang
+  // dilihat tetap di tempatnya.
+  //
+  // Hanya berlaku selama tanggalnya tidak berganti: ganti BRD/KG dan arsiran
+  // dept cuma menukar isi kolom yang itu-itu juga, sementara pindah tanggal
+  // memang wajar mulai dari kiri lagi.
+  function readTrafficDetailScroll(el) {
+    return el.querySelector(".traffic-detail-scroll")?.scrollLeft || 0;
+  }
+
+  function restoreTrafficDetailScroll(el, left) {
+    if (!left) return;
+    const scroller = el.querySelector(".traffic-detail-scroll");
+    // Lebar tabel bisa bergeser sedikit antara BRD dan KG karena jumlah
+    // digitnya beda; browser sendiri yang memangkas kalau posisinya kelewat.
+    if (scroller) scroller.scrollLeft = left;
+  }
+
   async function renderTrafficDetail() {
     const el = document.getElementById("trafficDetail");
     if (!el || !trafficDate) return;
 
     const req = ++_trafficDetailReq;
+    // Dibaca sebelum placeholder menimpanya. _trafficDetailRowsDate masih
+    // berisi tanggal yang sedang tampil di layar, jadi perbandingan ini yang
+    // memisahkan "ganti metrik" dari "pindah tanggal".
+    const keepLeft =
+      _trafficDetailRowsDate === trafficDate ? readTrafficDetailScroll(el) : 0;
     el.innerHTML = `<div class="traffic-note">memuat rincian material…</div>`;
 
     let rows;
@@ -1558,6 +1601,7 @@ const OverviewPage = (() => {
     _trafficDetailRows = rows;
     _trafficDetailRowsDate = trafficDate;
     el.innerHTML = trafficDetailTable(rows);
+    restoreTrafficDetailScroll(el, keepLeft);
   }
 
   // Menggambar ulang tabel dari baris yang sudah di tangan. Dipakai perubahan
@@ -1566,7 +1610,9 @@ const OverviewPage = (() => {
   function redrawTrafficDetail() {
     const el = document.getElementById("trafficDetail");
     if (el && _trafficDetailRows && _trafficDetailRowsDate === trafficDate) {
+      const keepLeft = readTrafficDetailScroll(el);
       el.innerHTML = trafficDetailTable(_trafficDetailRows);
+      restoreTrafficDetailScroll(el, keepLeft);
     } else {
       renderTrafficDetail();
     }
@@ -1793,8 +1839,8 @@ const OverviewPage = (() => {
             grid: { display: false },
             border: { display: false },
             ticks: {
-              font: { family: "'JetBrains Mono'", size: 9 },
-              color: "#9498b3",
+              font: { family: "'JetBrains Mono'", size: 9, weight: 700 },
+              color: "#1a1d2e", // --text
               maxRotation: 0,
               autoSkip: false,
               // Tampilkan tiap 2 jam supaya tidak berdesakan di layar HP.
@@ -1806,8 +1852,8 @@ const OverviewPage = (() => {
             grid: { color: "rgba(0,0,0,0.04)", lineWidth: 0.5 },
             border: { display: false },
             ticks: {
-              font: { family: "'JetBrains Mono'", size: 10 },
-              color: "#9498b3",
+              font: { family: "'JetBrains Mono'", size: 10, weight: 700 },
+              color: "#1a1d2e", // --text
               maxTicksLimit: 5,
               callback: (v) => KPI.fmtShort(v),
             },
@@ -3024,5 +3070,5 @@ const OverviewPage = (() => {
     redrawTrafficDetail();
   }
 
-  return { render, setTrafficDetail, setTrafficDeptMap };
+  return { render, refreshTraffic, setTrafficDetail, setTrafficDeptMap };
 })();
