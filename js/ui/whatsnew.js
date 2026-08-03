@@ -37,7 +37,7 @@ const WhatsNew = (() => {
     {
       id: "2026-07-31.1",
       title: "Apa yang Baru",
-      subtitle: "Ada beberapa hal baru di panel Trafic Bahan Karkas",
+      subtitle: "Ada hal baru di halaman Overview: Trafic Bahan Karkas",
       page: "overview",
       // Panduannya membukakan sendiri tiap tampilan yang dijelaskan, jadi user
       // tinggal menekan Next dan melihat hasilnya — tidak perlu menebak tombol
@@ -45,7 +45,7 @@ const WhatsNew = (() => {
       steps: [
         {
           spotlight: "trafficBody",
-          note: "Ini panel Trafic Bahan Karkas — coba geser jamnya, ganti tanggal, atau pilih BRD/KG. Tekan Next buat lihat yang baru.",
+          note: "Ini grafik Trafic Bahan Karkas, coba geser jamnya, ganti tanggal, atau pilih BRD/KG. Tekan Next buat lihat detailnya.",
           // Panduannya bisa diputar ulang, jadi mulai dari keadaan awal:
           // tampilan grafik, arsiran departemen mati.
           action: () => {
@@ -55,11 +55,11 @@ const WhatsNew = (() => {
         },
         {
           spotlight: "trafficDetailBtn",
-          note: 'Coba tombol ini. "+ Detail data" menukar grafik dengan rincian per material — tekan Next buat lanjutin.',
+          note: 'Tombol ini "+ Detail data" buat ubah grafik dengan matriks rincian per material, tekan Next buat lanjutin.',
         },
         {
           spotlight: "trafficDetail",
-          note: "Ini matriksnya: tiap baris satu ukuran karkas, tiap kolom satu jam. Navigasi tanggal dan pilihan BRD/KG di atas tetap bisa jalan di sini.",
+          note: "Ini matriksnya, tiap baris satu ukuran karkas, tiap kolom satu jam. Navigasi tanggal dan pilihan BRD/KG di atas tetap bisa jalan di sini.",
           action: () => OverviewPage?.setTrafficDetail?.(true),
         },
         {
@@ -68,22 +68,22 @@ const WhatsNew = (() => {
         },
         {
           spotlight: "trafficDeptBtn",
-          note: '"Map dept color" mengarsir tiap sel dengan warna departemen tujuan. Sel yang dikirim ke lebih dari satu departemen diarsir bertumpuk, lihat tabelnya.',
+          note: '"Map dept color" mengarsir tiap sel dengan warna departemen tujuan. Karkas ukuran tertentu pd jam tertentu yang dikirim ke lebih dari satu departemen diarsir bertumpuk.',
           action: () => OverviewPage?.setTrafficDeptMap?.(true),
         },
         {
           spotlight: "trafficDeptLegend",
-          note: "Tiap warna di sini bisa diklik untuk dimatikan atau dinyalakan — berguna saat ingin memisahkan satu departemen dari sel yang isinya bertumpuk.",
+          note: "Tiap warna di sini bisa diklik untuk dimatikan atau dinyalakan, berguna saat ingin memisahkan satu departemen dari sel yang isinya bertumpuk.",
         },
         {
           // Sengaja TANPA action: matriksnya harus masih terbuka supaya
           // tombolnya benar-benar terbaca "− Collapse data" saat disorot.
           spotlight: "trafficDetailBtn",
-          note: 'Selagi matriksnya terbuka, tombol tadi berubah jadi "− Collapse data" — itu jalan kembali ke grafik. Tekan Next, saya tutupkan.',
+          note: 'Selagi matriksnya terbuka, tombol tadi berubah jadi "− Collapse data" itu jalan kembali ke grafik.',
         },
         {
           spotlight: "trafficBody",
-          note: "Dan panelnya balik seperti semula. Selamat mencoba!",
+          note: "Dan grafiknya balik seperti semula. selamat mencoba!",
           // Panduannya ditutup di tampilan awal, bukan di tengah matriks yang
           // masih terbuka dengan arsiran menyala.
           action: () => {
