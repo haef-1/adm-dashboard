@@ -35,7 +35,7 @@
 const WhatsNew = (() => {
   const RELEASES = [
     {
-      id: "2026-07-31.1",
+      id: "2026-07-31.2",
       title: "Apa yang Baru",
       subtitle: "Ada hal baru di halaman Overview: Trafic Bahan Karkas",
       page: "overview",
