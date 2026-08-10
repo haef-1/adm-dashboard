@@ -19,7 +19,11 @@
   border-bottom: 1px solid var(--border-light);
 }
 
-#sectionKpi .section-header {
+/* Isinya kartu yang sudah punya garis tepi sendiri, jadi garis pemisah
+   header cuma menambah satu rusuk sejajar. */
+#sectionKpi .section-header,
+#cuKpiSection .section-header,
+#cuChartSection .section-header {
   border-bottom: none;
 }
 
@@ -3490,4 +3494,230 @@
     width: 150px;
     height: 11px;
   }
+}
+
+/* ═══════════════════════════════════════
+   CUT UP — Overall Haspro
+   ═══════════════════════════════════════ */
+
+.cu-header {
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.cu-controls {
+  flex: 1;
+  min-width: 260px;
+}
+
+.cu-range-nav {
+  gap: 4px;
+}
+
+.cu-body {
+  padding: 0 20px 18px;
+}
+
+/* ── KPI row ── */
+/* Kartu memakai .kpi-card bersama halaman Overview; di sini hanya padding
+   horizontal bawaan .kpi-row yang dinetralkan, karena .cu-body sudah
+   menyediakannya. */
+.cu-kpi-row {
+  padding: 0;
+  margin-bottom: 14px;
+}
+
+/* ── Donut + tabel ── */
+.cu-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 16px 18px 14px;
+  min-width: 0;
+}
+
+.cu-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.cu-card-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.01em;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Mode detail: tabel menggantikan donut, bukan mendampinginya — pola yang
+   sama dengan Trafic Bahan Karkas di Overview. */
+#cuProdukCard.detail-open .cu-donut-view {
+  display: none;
+}
+
+.cu-detail {
+  padding: 2px 0 0;
+}
+
+.cu-donut-wrap {
+  position: relative;
+  width: 100%;
+}
+
+.cu-donut-wrap canvas { display: block; }
+
+.cu-empty {
+  display: none;
+  padding: 40px 0;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.cu-donut-legend:not(:empty) {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cu-leg {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.cu-leg-name {
+  color: var(--text-mid);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cu-leg-val {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.cu-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: inline-block;
+}
+
+/* ── Tabel ── */
+.cu-table-wrap { overflow-x: auto; }
+
+.cu-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.cu-table th {
+  background: var(--surface-alt);
+  color: var(--text-soft);
+  font-size: 11px;
+  font-weight: 700;
+  text-align: left;
+  padding: 8px 10px;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--border);
+}
+
+.cu-table th:first-child { border-radius: var(--radius-sm) 0 0 0; }
+.cu-table th:last-child  { border-radius: 0 var(--radius-sm) 0 0; }
+
+.cu-table td {
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--border-light);
+  color: var(--text-mid);
+  vertical-align: middle;
+}
+
+.cu-table tbody tr:last-child td { border-bottom: none; }
+.cu-table tbody tr:hover td { background: var(--surface-alt); }
+
+.cu-th-no {
+  width: 34px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+
+.cu-td-name {
+  color: var(--text);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.cu-num {
+  text-align: right;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.cu-td-empty {
+  padding: 32px 10px;
+  text-align: center;
+  color: var(--text-muted);
+  border-bottom: none;
+}
+
+.cu-more-btn {
+  width: 100%;
+  margin-top: 12px;
+  padding: 11px 14px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--blue);
+  color: #fff;
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background var(--transition);
+}
+
+.cu-more-btn:hover { background: #2f6ac4; }
+
+/* Di layar lebar donut dan tabel jadi teregang sampai kehilangan bentuk
+   sejak keduanya menempati satu kartu selebar halaman. Kedua section
+   dibatasi bersamaan supaya tepi kanan barisan KPI tetap lurus dengan
+   tepi kartu di bawahnya. */
+@media (min-width: 1100px) {
+  #cuKpiSection,
+  #cuChartSection {
+    max-width: 60%;
+  }
+}
+
+/* Barisan KPI tidak perlu breakpoint sendiri: .kpi-row sudah flex-wrap dan
+   .kpi-card punya min-width 150px, jadi kartunya melipat sendiri persis
+   seperti di Overview. */
+@media (max-width: 760px) {
+  .cu-body { padding: 0 14px 16px; }
+}
+
+@media (max-width: 420px) {
+  .cu-card { padding: 14px 12px 12px; }
 }
