@@ -14,6 +14,27 @@ const CutUpPage = (() => {
   const TOP_N = 5;
   const FONT = "'Plus Jakarta Sans', Helvetica, Arial, sans-serif";
 
+  // Ukuran kanvas donut. H_BASE dan R hasil hitungan lebar adalah titik
+  // berangkat, bukan harga mati: keduanya dikoreksi fitCallouts() sesuai
+  // ruang yang benar-benar dibutuhkan labelnya.
+  const H_BASE = 330;      // tinggi kanvas mode callout
+  const H_COMPACT = 260;   // tinggi kanvas mode legend
+  const H_MAX = 470;       // batas atas pertumbuhan tinggi
+  const H_STEP = 30;
+  const R_MIN = 70;        // di bawah ini donutnya tidak lagi terbaca
+  const R_STEP = 8;
+
+  // Di bawah lebar ini label tidak lagi dibagi ke kiri dan kanan: donutnya
+  // digeser merapat ke kiri dan seluruh label memakai satu kolom di kanan.
+  // Dua kolom sempit selalu kalah dari satu kolom yang lebar.
+  const NARROW_W = 460;
+  const EDGE_L = 6;        // jarak donut ke tepi kiri di mode satu kolom
+  const MIN_COL = 90;      // kolom teks tersempit yang masih layak dipakai
+  // Kalau bahkan pada R_MIN kolom teksnya masih lebih sempit dari MIN_COL,
+  // kanvasnya memang tidak muat untuk callout dalam bentuk apa pun — barulah
+  // daftar keterangan di bawah donut dipakai.
+  const LEGEND_W = 2 * R_MIN + EDGE_L + MIN_COL + 24;
+
   // Ketebalan tiap slice sebagai pecahan lebar cincin — tebal, tipis, tebal,
   // tipis, dengan amplitudo yang tidak seragam supaya konturnya tidak terbaca
   // mekanis. Enam nilai cukup: donut ini paling banyak 5 item + Item Lainnya.
@@ -46,7 +67,7 @@ const CutUpPage = (() => {
 
   let cuExpanded = false;
   let cuDetailOpen = false;   // tabel menggantikan donut
-  let cuCanvas = null, cuRo = null, cuHover = -1, cuLayout = null;
+  let cuCanvas = null, cuRo = null;
   let _rangeDocListener = null, _rangeScrollListener = null;
   let _datesCache = null, _datesRawLen = -1;
   let _aggCache = new Map(), _aggRawLen = -1;
@@ -230,7 +251,11 @@ const CutUpPage = (() => {
   }
 
   function esc(s) {
-    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    // Kutip ganda ikut di-escape karena hasil esc() juga dipakai di dalam
+    // atribut (title nama item pada tabel detail).
+    return String(s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
   }
 
   // ═══════════════════════════════════════
@@ -274,7 +299,6 @@ const CutUpPage = (() => {
   function render(container) {
     destroy();
     cuExpanded = false;
-    cuHover = -1;
 
     // Rentang yang tersimpan bisa jadi sudah tidak punya data setelah import
     // baru; kembalikan ke default daripada menampilkan halaman kosong.
@@ -349,10 +373,6 @@ const CutUpPage = (() => {
     applyDetailState();
 
     cuCanvas = document.getElementById('cuDonutCanvas');
-    cuCanvas.addEventListener('mousemove', onCanvasMove);
-    cuCanvas.addEventListener('mouseleave', () => {
-      if (cuHover !== -1) { cuHover = -1; drawDonut(); }
-    });
 
     cuRo = new ResizeObserver(() => requestAnimationFrame(drawDonut));
     cuRo.observe(document.getElementById('cuDonutWrap'));
@@ -391,7 +411,6 @@ const CutUpPage = (() => {
     closeRangePicker();
     if (cuRo) { cuRo.disconnect(); cuRo = null; }
     cuCanvas = null;
-    cuLayout = null;
   }
 
   // ── Navigasi rentang ──
@@ -503,6 +522,13 @@ const CutUpPage = (() => {
     const total = sorted.reduce((acc, i) => acc + i[s.unit], 0);
     const shown = cuExpanded ? sorted : sorted.slice(0, TOP_N);
 
+    // Baris agregat sisanya — pasangan tabel dari slice "Item Lainnya" di
+    // donut, jadi kelima baris teratas plus baris ini selalu genap 100%.
+    // Saat daftar dibentangkan tiap itemnya sudah punya barisnya sendiri,
+    // jadi baris agregatnya ditiadakan.
+    const restItems = cuExpanded ? [] : sorted.slice(TOP_N);
+    const restVal = restItems.reduce((acc, i) => acc + i[s.unit], 0);
+
     if (!shown.length) {
       table.innerHTML = `<tbody><tr><td class="cu-td-empty">Tidak ada data HASIL untuk periode ini</td></tr></tbody>`;
       btn.style.display = 'none';
@@ -522,22 +548,27 @@ const CutUpPage = (() => {
         ${shown.map((it, i) => {
           const v = it[s.unit];
           const pct = total ? (v / total) * 100 : 0;
-          const dot = i < TOP_N ? `<span class="cu-dot" style="background:${COLORS[i]}"></span>` : '';
           return `<tr>
             <td class="cu-th-no">${i + 1}.</td>
-            <td class="cu-td-name">${dot}${esc(it.name)}</td>
-            <td class="cu-num">${fmtNum(v)}</td>
-            <td class="cu-num">${fmtPct(pct)}</td>
+            <td class="cu-td-name" title="${esc(it.name)}">${esc(it.name)}</td>
+            <td class="cu-num"><span class="cu-num-val cu-num-qty">${fmtNum(v)}</span></td>
+            <td class="cu-num"><span class="cu-num-val cu-num-pct">${fmtPct(pct)}</span></td>
           </tr>`;
         }).join('')}
+        ${restItems.length ? `<tr class="cu-row-other">
+          <td class="cu-th-no">${shown.length + 1}.</td>
+          <td class="cu-td-name" title="Gabungan ${restItems.length} item di luar 5 teratas">Item Lainnya (${restItems.length})</td>
+          <td class="cu-num"><span class="cu-num-val cu-num-qty">${fmtNum(restVal)}</span></td>
+          <td class="cu-num"><span class="cu-num-val cu-num-pct">${fmtPct(total ? (restVal / total) * 100 : 0)}</span></td>
+        </tr>` : ''}
       </tbody>`;
 
     const rest = sorted.length - TOP_N;
     if (rest > 0) {
       btn.style.display = '';
       btn.textContent = cuExpanded
-        ? 'Tampilkan 5 Teratas Saja'
-        : 'Lihat Semua Item Lainnya (' + rest + ')';
+        ? 'tampilkan 5 teratas saja'
+        : 'lihat semua item lainnya (' + rest + ')';
     } else {
       btn.style.display = 'none';
     }
@@ -566,7 +597,6 @@ const CutUpPage = (() => {
       cuCanvas.style.display = 'none';
       legendEl.innerHTML = '';
       empty.style.display = 'block';
-      cuLayout = null;
       return;
     }
     cuCanvas.style.display = 'block';
@@ -575,27 +605,12 @@ const CutUpPage = (() => {
     const CW = wrap.clientWidth;
     if (!CW) return;
 
-    // Di lebar sempit label bercabang tidak muat — donutnya dibesarkan dan
-    // keterangannya pindah ke daftar HTML di bawah kanvas.
-    const compact = CW < 460;
-    const H = compact ? 260 : 330;
-    const cx = CW / 2, cy = H / 2;
-    const R = compact
-      ? Math.min(CW * 0.34, H * 0.42)
-      : Math.max(70, Math.min((CW - 250) / 2, H * 0.42));
-    // Batas dalam slice tertebal — sekaligus titik tersempit lubang, karena
-    // slice yang lebih tipis menyusut ke arah luar dan melebarkan lubang di
-    // sektornya. 0.51 (bukan 0.62) supaya cincinnya cukup tebal untuk
-    // menampung selisih kontur; dengan lubang lama selisihnya cuma ~19 px.
-    const inner = R * 0.51;
-
-    const DPR = devicePixelRatio || 1;
-    cuCanvas.width = CW * DPR; cuCanvas.height = H * DPR;
-    cuCanvas.style.width = CW + 'px'; cuCanvas.style.height = H + 'px';
-    const ctx = cuCanvas.getContext('2d');
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.scale(DPR, DPR);
-    ctx.clearRect(0, 0, CW, H);
+    // Tiga tata letak, dipilih menurut lebar yang tersedia:
+    //   lebar  → donut di tengah, label terbagi kiri dan kanan
+    //   sempit → donut merapat ke kiri, semua label satu kolom di kanan
+    //   mepet  → tidak ada ruang untuk callout sama sekali, pakai daftar
+    const legendOnly = CW < LEGEND_W;
+    const oneSided = !legendOnly && CW < NARROW_W;
 
     const angles = [];
     let a = -Math.PI / 2;
@@ -605,48 +620,42 @@ const CutUpPage = (() => {
       a += sweep;
     }
 
-    // Lubang tengah tetap, tepi luar naik-turun berselang-seling supaya
-    // membentuk kontur bergelombang. Ketebalannya hiasan, bukan data —
-    // besaran tiap slice tetap dibaca dari sudut dan label persennya.
-    //
-    // Polanya dipatok, bukan diacak: hover memicu drawDonut() lagi, dan
-    // ketebalan acak akan membuat donut berubah bentuk tiap kursor lewat.
-    //
-    // Jangkarnya slice bernilai terbesar, bukan indeks 0. Keduanya biasanya
-    // sama karena slice sudah terurut menurun, kecuali saat "Item Lainnya"
-    // melampaui item teratas — misal 100 item kecil, top-5 cuma 5% dan
-    // sisanya 95%. Ia selalu ditaruh paling belakang, jadi tanpa penjangkaran
-    // ini slice terbesar di layar justru yang paling tipis.
-    const BAND = R - inner;
-    // Semua slice dipusatkan di radius yang sama, lalu tebalnya dibagi rata
-    // ke dalam dan ke luar. Jadi konturnya muncul di dua sisi: tepi luar
-    // bergelombang, dan lubang tengahnya ikut melebar-menyempit.
-    const midR = (inner + R) / 2;
-    const maxIdx = slices.reduce((best, sl, i) => (sl.pct > slices[best].pct ? i : best), 0);
-    const thick = slices.map((_, i) => {
-      const step = (i - maxIdx + slices.length) % slices.length;
-      return BAND * THICK_PATTERN[step % THICK_PATTERN.length];
-    });
-    const innerR = thick.map(t => midR - t / 2);
-    const outerR = thick.map(t => midR + t / 2);
-    // Hover melebar ke luar saja — kalau ikut ke dalam, slice-nya menjorok ke
-    // ruang teks total dan angkanya tertimpa warna.
-    const rOf = i => outerR[i] + (i === cuHover ? 7 : 0);
+    const ctx = cuCanvas.getContext('2d');
 
-    cuLayout = { cx, cy, R, inner, innerR, outerR, angles, H, CW, compact };
+    // Ukuran donut mengikuti labelnya, bukan sebaliknya: fitCallouts() memilih
+    // R terbesar yang masih menulis semua nama utuh, lalu H terkecil yang
+    // membuat tumpukan labelnya muat. Di mode daftar tidak ada callout, jadi
+    // ukurannya tetap seperti semula.
+    let H, R, geom, plan = null;
+    if (legendOnly) {
+      H = H_COMPACT;
+      R = Math.min(CW * 0.34, H * 0.42);
+      geom = ringGeometry(slices, CW / 2, H / 2, R);
+    } else {
+      const fit = fitCallouts(ctx, s, slices, angles, CW, oneSided);
+      H = fit.H; R = fit.R; geom = fit.geom; plan = fit.plan;
+    }
+    const { cx, cy, inner, innerR, outerR } = geom;
+
+    const DPR = devicePixelRatio || 1;
+    cuCanvas.width = CW * DPR; cuCanvas.height = H * DPR;
+    cuCanvas.style.width = CW + 'px'; cuCanvas.style.height = H + 'px';
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.scale(DPR, DPR);
+    ctx.clearRect(0, 0, CW, H);
 
     // ── Slice ──
     slices.forEach((sl, i) => {
       const { a0, a1 } = angles[i];
       ctx.beginPath();
-      ctx.arc(cx, cy, rOf(i), a0, a1);
+      ctx.arc(cx, cy, outerR[i], a0, a1);
       ctx.arc(cx, cy, innerR[i], a1, a0, true);
       ctx.closePath();
       // Bayangan di tepi dalam — memberi kesan cincin punya ketebalan, bukan
       // pelat datar. Gelapnya luruh dalam INNER_SHADE_SPAN pertama lebar
       // cincin, lalu berhenti di sisa INNER_SHADE_FLOOR, tidak sampai nol.
       const rest = darken(sl.color, INNER_SHADE * INNER_SHADE_FLOOR);
-      const grad = ctx.createRadialGradient(cx, cy, innerR[i], cx, cy, rOf(i));
+      const grad = ctx.createRadialGradient(cx, cy, innerR[i], cx, cy, outerR[i]);
       grad.addColorStop(0, darken(sl.color, INNER_SHADE));
       grad.addColorStop(INNER_SHADE_SPAN, rest);
       grad.addColorStop(1, rest);
@@ -664,7 +673,7 @@ const CutUpPage = (() => {
       if (sl.pct < 5) return;
       const { a0, a1 } = angles[i];
       const mid = (a0 + a1) / 2;
-      const rr = (innerR[i] + rOf(i)) / 2;
+      const rr = (innerR[i] + outerR[i]) / 2;
       ctx.fillStyle = '#fff';
       ctx.font = '700 13px ' + FONT;
       ctx.fillText(Math.round(sl.pct) + '%', cx + Math.cos(mid) * rr, cy + Math.sin(mid) * rr);
@@ -680,7 +689,7 @@ const CutUpPage = (() => {
     // warna slice.
     const totalText = fmtNum(total) + ' ' + unitLabel(s);
     const holeW = inner * 2 - 16;
-    let fs = compact ? 16 : 18;
+    let fs = R < 100 ? 16 : 18;
     ctx.font = '800 ' + fs + 'px ' + FONT;
     while (fs > 10 && ctx.measureText(totalText).width > holeW) {
       fs -= 1;
@@ -688,7 +697,7 @@ const CutUpPage = (() => {
     }
     ctx.fillText(totalText, cx, cy + 9);
 
-    if (compact) {
+    if (legendOnly) {
       legendEl.innerHTML = slices.map(sl => `
         <div class="cu-leg">
           <span class="cu-dot" style="background:${sl.color}"></span>
@@ -699,87 +708,622 @@ const CutUpPage = (() => {
     }
     legendEl.innerHTML = '';
 
-    drawCallouts(ctx, s, slices, angles, outerR, cx, cy, R, H, CW);
+    drawCalloutNodes(ctx, plan.nodes, outerR, cx, cy);
   }
 
-  function drawCallouts(ctx, s, slices, angles, outerR, cx, cy, R, H, CW) {
-    const LINE_H = 14, GAP = 32, MARGIN = 10;
+  // Geometri cincin untuk satu kandidat ukuran (pusat + R).
+  //
+  // Lubang tengah tetap, tepi luar naik-turun berselang-seling supaya
+  // membentuk kontur bergelombang. Ketebalannya hiasan, bukan data — besaran
+  // tiap slice tetap dibaca dari sudut dan label persennya.
+  //
+  // Polanya dipatok, bukan diacak: drawDonut() dipanggil ulang tiap resize dan
+  // tiap data disegarkan, dan ketebalan acak akan membuat donut berubah bentuk
+  // di setiap panggilan itu.
+  //
+  // Jangkarnya slice bernilai terbesar, bukan indeks 0. Keduanya biasanya
+  // sama karena slice sudah terurut menurun, kecuali saat "Item Lainnya"
+  // melampaui item teratas — misal 100 item kecil, top-5 cuma 5% dan sisanya
+  // 95%. Ia selalu ditaruh paling belakang, jadi tanpa penjangkaran ini slice
+  // terbesar di layar justru yang paling tipis.
+  function ringGeometry(slices, cx, cy, R) {
+    // Batas dalam slice tertebal — sekaligus titik tersempit lubang, karena
+    // slice yang lebih tipis menyusut ke arah luar dan melebarkan lubang di
+    // sektornya. 0.51 (bukan 0.62) supaya cincinnya cukup tebal untuk
+    // menampung selisih kontur; dengan lubang lama selisihnya cuma ~19 px.
+    const inner = R * 0.51;
+    const BAND = R - inner;
+    // Semua slice dipusatkan di radius yang sama, lalu tebalnya dibagi rata
+    // ke dalam dan ke luar. Jadi konturnya muncul di dua sisi: tepi luar
+    // bergelombang, dan lubang tengahnya ikut melebar-menyempit.
+    const midR = (inner + R) / 2;
+    const maxIdx = slices.reduce((best, sl, i) => (sl.pct > slices[best].pct ? i : best), 0);
+    const thick = slices.map((_, i) => {
+      const step = (i - maxIdx + slices.length) % slices.length;
+      return BAND * THICK_PATTERN[step % THICK_PATTERN.length];
+    });
+    return {
+      cx, cy, inner,
+      innerR: thick.map(t => midR - t / 2),
+      outerR: thick.map(t => midR + t / 2),
+    };
+  }
+
+  // Hasil pencarian ukuran disimpan. Selain menghemat pengukuran teks yang
+  // berulang, ini juga menghentikan putaran umpan balik dengan ResizeObserver:
+  // menaikkan H mengubah tinggi kanvas → wrapper berubah ukuran → RO memicu
+  // drawDonut() lagi. Dengan lebar yang sama, panggilan kedua memakai hasil
+  // yang sama persis, jadi ukurannya langsung diam.
+  let _fitCache = null;
+
+  // Mencari ukuran donut yang membuat labelnya muat, dengan satu tuas untuk
+  // tiap masalah:
+  //
+  //   nama terpotong  → masalah lebar → R dikecilkan (kolom teks melebar)
+  //   label bertumpuk → masalah tinggi → H ditinggikan
+  //
+  // R sengaja tidak ikut membesar saat H tumbuh. Rumus lama mengikat R ke
+  // H*0.42, jadi menaikkan H demi ruang label justru membesarkan donut dan
+  // menggerus balik lebar teks yang baru saja didapat.
+  function fitCallouts(ctx, s, slices, angles, CW, oneSided) {
+    const key = CW + '|' + (oneSided ? '1' : '2') + '|' + s.unit + '|' +
+      slices.map(sl => sl.name + '#' + Math.round(sl.val)).join('|');
+    if (_fitCache && _fitCache.key === key) return _fitCache;
+
+    // Di mode satu kolom donutnya menempel ke kiri, jadi mengecilkan R
+    // menggeser pusatnya ikut ke kiri: kolom teks melebar dua kali lipat dari
+    // tiap piksel R yang dilepas. R terbesarnya dibatasi supaya kolom kanan
+    // tidak pernah lebih sempit dari MIN_COL.
+    const rMax = oneSided
+      ? Math.max(R_MIN, Math.min((CW - EDGE_L - MIN_COL - 24) / 2, H_BASE * 0.42))
+      : Math.max(R_MIN, Math.min((CW - 250) / 2, H_BASE * 0.42));
+
+    const geomFor = (R, H) =>
+      ringGeometry(slices, oneSided ? EDGE_L + R : CW / 2, H / 2, R);
+
+    // ── Lebar: kecilkan R sampai tidak ada nama yang terpotong ──
+    let best = null;
+    for (let r = rMax; r >= R_MIN - 0.001; r -= R_STEP) {
+      const R = Math.max(r, R_MIN);
+      const geom = geomFor(R, H_BASE);
+      const plan = planCallouts(ctx, s, slices, angles, geom, R, H_BASE, CW, oneSided);
+      // Perbandingannya ketat, jadi saat sama-sama bagus R yang lebih besar
+      // yang bertahan — donut sebesar mungkin selama nama tetap utuh.
+      if (!best || plan.clipped < best.plan.clipped) best = { R, geom, plan };
+      if (!plan.clipped || R === R_MIN) break;
+    }
+
+    // ── Tinggi: tinggikan H sampai tumpukan label tidak lagi berdempetan ──
+    let H = H_BASE, geom = best.geom, plan = best.plan;
+    while (!plan.fits && H + H_STEP <= H_MAX) {
+      H += H_STEP;
+      geom = geomFor(best.R, H);
+      plan = planCallouts(ctx, s, slices, angles, geom, best.R, H, CW, oneSided);
+    }
+
+    _fitCache = { key, R: best.R, H, geom, plan };
+    return _fitCache;
+  }
+
+  const NAME_FONT = '600 11.5px ' + FONT;
+  const VAL_FONT = '600 11px ' + FONT;
+  const NAME_LINES_MAX = 2;
+
+  // Sudut dinormalkan ke (-π, π] — dipakai untuk membandingkan arah dan
+  // menentukan arah putar terpendek.
+  function norm(t) {
+    while (t <= -Math.PI) t += Math.PI * 2;
+    while (t > Math.PI) t -= Math.PI * 2;
+    return t;
+  }
+
+  // Sudut pangkal garis pada sebuah slice. Garis tidak harus berangkat dari
+  // tengah slice — titik mana pun di busurnya sah, dan yang dipilih adalah
+  // yang paling dekat ke arah labelnya. Untuk slice yang labelnya jauh
+  // berseberangan, ini memindahkan pangkalnya ke tepi slice yang menghadap
+  // label sehingga jalurnya jauh lebih pendek — sering malah tidak perlu
+  // memutari donut sama sekali.
+  //
+  // Disisakan pad dari kedua batas supaya pangkalnya tidak jatuh tepat di
+  // garis pemisah putih antar slice.
+  function anchorAngle(a0, a1, theta) {
+    const pad = Math.min((a1 - a0) * 0.25, 0.08);
+    const lo = a0 + pad, hi = a1 - pad;
+    if (hi <= lo) return (a0 + a1) / 2;
+    const t = norm(theta - lo);
+    if (t >= 0 && t <= hi - lo) return lo + t;
+    return Math.abs(norm(theta - lo)) <= Math.abs(norm(theta - hi)) ? lo : hi;
+  }
+
+  // Slice mana yang menempati sudut ini.
+  function sliceAt(angles, th) {
+    const base = angles[0].a0;
+    let t = th;
+    while (t < base) t += Math.PI * 2;
+    while (t >= base + Math.PI * 2) t -= Math.PI * 2;
+    for (let i = 0; i < angles.length; i++) {
+      if (t >= angles[i].a0 && t < angles[i].a1) return i;
+    }
+    return -1;
+  }
+
+  // Apakah jalur (polyline) menimpa cincin? Diuji terhadap cincin yang
+  // sebenarnya — outerR per slice — bukan terhadap satu lingkaran rata-rata:
+  // sebuah garis bisa saja tidak menyelam ke arah pusat tapi tetap lewat di
+  // atas cincin slice tetangga yang lebih tebal. Slice miliknya sendiri
+  // dikecualikan, karena di situlah garis itu memang berpangkal.
+  function pathHitsRing(cx, cy, pts, angles, outerR, own, pad) {
+    for (let k = 0; k + 1 < pts.length; k++) {
+      const A = pts[k], B = pts[k + 1];
+      const steps = Math.max(2, Math.ceil(Math.hypot(B.x - A.x, B.y - A.y) / 6));
+      for (let m = 1; m <= steps; m++) {
+        const t = m / steps;
+        const x = A.x + (B.x - A.x) * t, y = A.y + (B.y - A.y) * t;
+        const r = Math.hypot(x - cx, y - cy);
+        const idx = sliceAt(angles, Math.atan2(y - cy, x - cx));
+        if (idx === -1 || idx === own) continue;
+        if (r < outerR[idx] + pad) return true;
+      }
+    }
+    return false;
+  }
+
+  // Titik-titik pada kurva kuadratik, untuk diuji seperti polyline biasa.
+  function quadPoints(P0, C, P2, n) {
+    const out = [];
+    for (let k = 0; k <= n; k++) {
+      const t = k / n, u = 1 - t;
+      out.push({
+        x: u * u * P0.x + 2 * u * t * C.x + t * t * P2.x,
+        y: u * u * P0.y + 2 * u * t * C.y + t * t * P2.y,
+      });
+    }
+    return out;
+  }
+
+  // Menghitung posisi, lebar teks, dan pemenggalan nama tiap label untuk satu
+  // kandidat geometri — tanpa menggambar apa pun, supaya fitCallouts() bisa
+  // mencoba beberapa ukuran sebelum memutuskan.
+  function planCallouts(ctx, s, slices, angles, geom, R, H, CW, oneSided) {
+    const { cx, cy, outerR } = geom;
+    const LINE_H = 14, PAD = 10, MARGIN = 10;
+    const LEAD = 18;    // panjang lengan siku di luar tepi slice
+    const STUB = 12;    // jarak siku → awal teks
+    const CLEAR = 10;   // jarak aman teks dari siluet donut
+    const top = MARGIN, bottom = H - MARGIN;
+
+    // Jangkar vertikal semua label memakai radius yang sama, bukan outerR
+    // masing-masing. Cincinnya bergelombang, dan kalau jangkarnya ikut
+    // bergelombang urutan y bawaan bisa menyimpang dari urutan sudut — padahal
+    // urutan itulah yang menjaga garis tidak menyilang.
+    const anchorR = R + 16;
 
     const nodes = slices.map((sl, i) => {
       const mid = (angles[i].a0 + angles[i].a1) / 2;
+      let name = sl.name;
+      if (sl.count) name += ' (' + sl.count + ')';
+      const cos = Math.cos(mid);
+      const a = norm(mid);
+      const right = oneSided || cos >= 0;
+
+      // Urutan kedatangan label: sejauh apa penghubungnya menempuh keliling
+      // cincin, dihitung dari jam 12 menyusuri sisinya sendiri. Dengan label
+      // terurut menurut kunci ini, jalur yang satu tidak perlu melangkahi
+      // jalur yang lain — itu syarat cukup agar garisnya tidak menyilang.
+      //
+      // Mode satu kolom memakai sudut apa adanya: slice kiri-atas (a → -π)
+      // menempuh jalur terpanjang lewat puncak sehingga labelnya paling atas,
+      // dan slice kiri-bawah (a → π) lewat dasar sehingga labelnya paling
+      // bawah. Mode dua kolom memakai kunci cermin untuk sisi kirinya.
+      const key = oneSided || cos >= 0
+        ? a
+        : (a <= -Math.PI / 2 ? -Math.PI / 2 - a : Math.PI + Math.PI / 2 - a);
+
+      // Posisi awal harus monoton terhadap key, kalau tidak sapuan perenggangan
+      // justru harus menukar urutan. Slice paruh kiri di mode satu kolom tidak
+      // punya ketinggian alami di kolom kanan; posisinya diatur belakangan
+      // memakai ruang kosong di atas dan di bawah donut.
+      const y = cy + Math.sin(mid) * anchorR;
+
       return {
-        i, s: sl, mid,
-        right: Math.cos(mid) >= 0,
-        // Titik awal mengikuti tepi slice-nya sendiri, tapi kolom siku dan
-        // teksnya tetap dipatok ke R supaya semua label lurus satu garis.
-        y: cy + Math.sin(mid) * (outerR[i] + 16),
+        i, s: sl, mid, a, key, name, right, y,
+        val: fmtItemVal(s, sl.val),
+        // Jangkauan horizontal siku bila mengikuti rayonya sendiri. Slice di
+        // dekat jam 3/9 menghasilkan nilai ≈ R (seperti sebelumnya), slice di
+        // dekat jam 12/6 menghasilkan nilai mendekati nol — di situlah label
+        // boleh merapat ke tengah dan memakai lebar kanvas yang selama ini
+        // menganggur di atas dan bawah lingkaran.
+        //
+        // Slice yang berada di paruh kiri pada mode satu kolom tidak punya ray
+        // ke kanan sama sekali; posisinya ditentukan siluet donut saja.
+        ray: oneSided && cos < 0 ? 0 : Math.abs(cos) * (outerR[i] + LEAD),
+        lines: [], valText: '', h: LINE_H * 2, w: 0, maxW: 0, xText: cx,
+        aim: a, hugR: R + 6,
       };
     });
 
-    // Dorong label yang bertumpuk supaya tidak saling menimpa, per sisi.
-    // Penggeserannya harus per-grup, bukan per-node: menjepit tiap node satu
-    // per satu ke batas atas justru merapatkan kembali label yang barusan
-    // direnggangkan — slice tipis di dekat jam 12 paling sering kena.
-    const top = MARGIN + LINE_H;
-    const bottom = H - MARGIN - LINE_H;
-    const avail = bottom - top;
+    // Slice paruh kiri di mode satu kolom: labelnya tidak bisa berada setinggi
+    // slice-nya, jadi ditaruh di pita kosong di atas dan di bawah donut —
+    // ruang yang selama ini menganggur — dan dibagi rata memenuhi pita itu.
+    //
+    // Dua keuntungan sekaligus: label paruh kanan tidak terdesak dari
+    // ketinggian aslinya sehingga garisnya tetap pendek dan lurus, dan jalur
+    // pelukan yang panjang itu berakhir dekat puncak atau dasar cincin — persis
+    // di sebelah labelnya.
+    if (oneSided) {
+      const fill = (list, y0, y1) => {
+        if (!list.length) return;
+        const step = (y1 - y0) / list.length;
+        list.forEach((n, k) => { n.y = y0 + step * (k + 0.5); });
+      };
+      const byKey = (x, z) => x.key - z.key;
+      fill(nodes.filter(n => n.a < -Math.PI / 2).sort(byKey), top + LINE_H, cy - anchorR);
+      fill(nodes.filter(n => n.a > Math.PI / 2).sort(byKey), cy + anchorR, bottom - LINE_H);
+    }
 
-    [true, false].forEach(side => {
-      const group = nodes.filter(n => n.right === side).sort((a, b) => a.y - b.y);
+    // Mengukur ulang satu label pada posisi y-nya saat ini: seberapa jauh ia
+    // harus menyingkir dari donut, berapa lebar teks yang tersisa sampai tepi
+    // kanvas, dan berapa baris nama yang muat di lebar itu.
+    function measure(n) {
+      const dir = n.right ? 1 : -1;
+      // Setengah lebar donut pada ketinggian label. Diukur dari tepi blok yang
+      // paling dekat ke pusat, jadi tidak ada satu baris pun yang bisa
+      // menimpa cincin. Di luar rentang lingkaran nilainya nol — label bebas
+      // merapat ke tengah.
+      const dy = Math.max(0, Math.abs(n.y - cy) - n.h / 2);
+      const silhouette = dy < R ? Math.sqrt(R * R - dy * dy) + CLEAR : 0;
+      const off = Math.max(n.ray, silhouette);
+
+      n.xText = cx + dir * (off + STUB);
+      n.maxW = (n.right ? CW - n.xText : n.xText) - 6;
+
+      ctx.font = NAME_FONT;
+      n.lines = wrapText(ctx, n.name, n.maxW, NAME_LINES_MAX);
+      n.h = (n.lines.length + 1) * LINE_H;
+      let w = 0;
+      n.lines.forEach(l => { w = Math.max(w, ctx.measureText(l).width); });
+
+      ctx.font = VAL_FONT;
+      n.valText = clip(ctx, n.val, n.maxW);
+      n.w = Math.max(w, ctx.measureText(n.valText).width);
+    }
+
+    // Dua label hanya bertabrakan kalau rentang horizontalnya beririsan.
+    // Sejak tiap label punya x sendiri, label di jam 12 yang membentang ke
+    // tengah dan label di jam 2 yang jauh di kanan boleh duduk berdampingan
+    // di ketinggian yang sama.
+    function overlapX(a, b) {
+      const a0 = a.right ? a.xText : a.xText - a.w;
+      const a1 = a.right ? a.xText + a.w : a.xText;
+      const b0 = b.right ? b.xText : b.xText - b.w;
+      const b1 = b.right ? b.xText + b.w : b.xText;
+      return a0 < b1 + 8 && b0 < a1 + 8;
+    }
+
+    // Dimatikan spread() begitu satu sisi tidak lagi tertampung pada tinggi
+    // kanvas ini.
+    let fits = true;
+
+    function spread(side) {
+      // Diurutkan menurut key, bukan y: urutan sudut inilah yang harus
+      // dipertahankan. Kedua sapuan di bawah hanya menggeser, tidak pernah
+      // menukar, jadi urutan itu bertahan sampai akhir.
+      const group = nodes.filter(n => n.right === side).sort((a, b) => a.key - b.key);
       if (!group.length) return;
 
-      // Kalau labelnya lebih banyak daripada ruang yang ada, jarak ideal tidak
-      // mungkin dipenuhi — bagi rata saja supaya jaraknya seragam.
-      if ((group.length - 1) * GAP > avail) {
-        const step = group.length > 1 ? avail / (group.length - 1) : 0;
-        group.forEach((n, i) => { n.y = top + i * step; });
-        return;
+      // Sapuan turun: tiap label didorong ke bawah hanya sampai lepas dari
+      // label-label di atasnya yang rentang x-nya beririsan dengannya.
+      group.forEach((n, i) => {
+        let limit = top + n.h / 2;
+        for (let j = 0; j < i; j++) {
+          const p = group[j];
+          if (overlapX(n, p)) limit = Math.max(limit, p.y + p.h / 2 + PAD + n.h / 2);
+        }
+        if (n.y < limit) n.y = limit;
+      });
+
+      // Sapuan naik: yang tersorong melewati batas bawah ditarik kembali,
+      // dengan aturan irisan yang sama.
+      for (let i = group.length - 1; i >= 0; i--) {
+        const n = group[i];
+        let ceiling = bottom - n.h / 2;
+        for (let j = group.length - 1; j > i; j--) {
+          const q = group[j];
+          if (overlapX(n, q)) ceiling = Math.min(ceiling, q.y - q.h / 2 - PAD - n.h / 2);
+        }
+        if (n.y > ceiling) n.y = ceiling;
       }
 
-      for (let i = 1; i < group.length; i++) {
-        if (group[i].y - group[i - 1].y < GAP) group[i].y = group[i - 1].y + GAP;
+      // Masih ada yang terdorong keluar batas atas berarti satu rantai label
+      // yang saling beririsan memang lebih tinggi dari kanvasnya. Ditandai
+      // tidak muat — fitCallouts() akan mencoba lagi dengan H yang lebih
+      // tinggi. Pembagian rata di bawah hanya jaring pengaman untuk saat H
+      // sudah mentok di H_MAX.
+      if (group.some(n => n.y - n.h / 2 < top - 0.5) && group.length > 1) {
+        fits = false;
+        const yF = top + group[0].h / 2;
+        const yL = bottom - group[group.length - 1].h / 2;
+        const step = (yL - yF) / (group.length - 1);
+        group.forEach((n, i) => { n.y = yF + i * step; });
       }
-      const over = group[group.length - 1].y - bottom;
-      if (over > 0) group.forEach(n => { n.y -= over; });
-      const under = top - group[0].y;
-      if (under > 0) group.forEach(n => { n.y += under; });
+    }
+
+    // Ukur → renggangkan → ukur ulang. Pengukuran pertama memakai y bawaan
+    // slice; setelah label bergeser, jarak ke siluet donut berubah dan lebar
+    // teksnya ikut berubah, jadi keduanya dihitung ulang lalu dirapikan lagi.
+    nodes.forEach(measure);
+    spread(true); spread(false);
+    nodes.forEach(measure);
+    fits = true;   // hanya hasil sapuan terakhir yang menentukan
+    spread(true); spread(false);
+
+    // ── Jalur penghubung ──
+    // Tiga bentuk, dipilih sehemat mungkin:
+    //
+    //   lurus     garis langsung ke siku lalu mendatar ke label. Bentuk baku,
+    //             jalur terpendek, dan yang paling terbaca sebagai panah.
+    //   melengkung  kalau garis lurusnya cuma menyerempet tepi donut. Cukup
+    //             dibusurkan sedikit keluar — memutari cincin untuk simpangan
+    //             sekecil itu justru berlebihan dan malah memancing silang.
+    //   memeluk   kalau labelnya benar-benar berseberangan dengan slice-nya,
+    //             yang praktis hanya terjadi di mode satu kolom.
+    const OBST = R + 3;
+    // Jarak bebas garis terhadap cincin. Bukan cuma soal rapi: garis yang
+    // menyerempet cincin tetap terhitung "lurus", padahal jalur pelukan
+    // tetangganya lewat persis di atasnya. Diberi jarak, kasus seperti itu
+    // ikut naik jadi pelukan dan tunduk pada aturan bersarang yang sama.
+    const RING_GAP = 3;
+    // Simpangan sudut terbesar yang masih ditangani dengan lengkungan. Sengaja
+    // kecil: lengkungan itu obat untuk garis yang cuma menyerempet. Kalau
+    // simpangannya besar, lengkungannya berubah jadi setengah putaran yang
+    // menyapu wilayah jalur lain tanpa ikut aturan bersarang — dan itu justru
+    // sumber persilangan. Simpangan besar diserahkan ke pelukan.
+    const BOW_MAX = 0.85;
+
+    nodes.forEach(n => {
+      const dir = n.right ? 1 : -1;
+      n.elbow = { x: n.xText - dir * STUB, y: n.y };
+      n.dot = { x: n.xText - dir * 6, y: n.y };
+
+      // Pangkal garis digeser ke titik slice yang paling menghadap labelnya.
+      // Di mode dua kolom label selalu ada di sisi slice-nya sendiri, jadi
+      // hasilnya praktis tetap di tengah — tampilan lamanya tidak berubah.
+      const { a0, a1 } = angles[n.i];
+      const dotA = Math.atan2(n.dot.y - cy, n.dot.x - cx);
+      n.anchor = anchorAngle(a0, a1, dotA);
+      const edge = outerR[n.i] + 2;
+      n.p0 = { x: cx + Math.cos(n.anchor) * edge, y: cy + Math.sin(n.anchor) * edge };
+
+      // Coba yang paling murah dulu, naik tingkat hanya kalau jalurnya
+      // terbukti menimpa cincin. Pengujiannya pada jalur yang sudah jadi,
+      // bukan pada perkiraan — jadi tidak ada kasus yang lolos diam-diam.
+      n.hug = false;
+      n.bow = null;
+      if (pathHitsRing(cx, cy, [n.p0, n.elbow, n.dot], angles, outerR, n.i, RING_GAP)) {
+        const delta = norm(dotA - n.anchor);
+        if (Math.abs(delta) <= BOW_MAX) {
+          // Titik kendali di garis bagi sudut, sejauh perpotongan dua garis
+          // singgung lingkaran penghalang. Kurva kuadratik dengan kendali di
+          // situ berada di luar lingkaran itu. Kalau ternyata masih menimpa,
+          // kendalinya didorong lebih jauh sebelum menyerah ke pelukan.
+          for (let push = 0; push < 4 && !n.bow; push++) {
+            const rc = Math.min((OBST + 4 + push * 10) / Math.cos(Math.abs(delta) / 2), R * 2.2);
+            const t = n.anchor + delta / 2;
+            const c = { x: cx + Math.cos(t) * rc, y: cy + Math.sin(t) * rc };
+            if (!pathHitsRing(cx, cy, quadPoints(n.p0, c, n.dot, 12), angles, outerR, n.i, RING_GAP)) n.bow = c;
+          }
+        }
+        if (!n.bow) n.hug = true;
+      }
     });
+
+    assignHugGeometry(nodes, cx, cy, R);
+
+    // Aturan cincin saja belum cukup: sebuah garis lurus bisa lolos dari cincin
+    // tapi tetap dilewati jalur pelukan tetangganya. Daripada menyetel jarak
+    // bebas sampai kebetulan pas — nilai yang menembus lubang jarum dan gampang
+    // meleset saat datanya berubah — hasilnya diperiksa apa adanya, lalu yang
+    // masih menyilang dinaikkan tingkat dan diperiksa lagi.
+    for (let round = 0; round < 6; round++) {
+      const paths = nodes.map(n => calloutPath(n, cx, cy));
+      let changed = false;
+      for (let i = 0; i < nodes.length && !changed; i++) {
+        for (let j = i + 1; j < nodes.length && !changed; j++) {
+          if (!pathsCross(paths[i], paths[j])) continue;
+          const A = nodes[i], B = nodes[j];
+          // Yang belum memeluk dinaikkan dulu, karena begitu memeluk ia ikut
+          // aturan bersarang. Kalau keduanya sudah memeluk, yang jalurnya
+          // lebih panjang digeser satu tingkat ke luar.
+          const promote = !A.hug ? A : (!B.hug ? B : null);
+          if (promote) { promote.hug = true; promote.bow = null; }
+          else {
+            const outer = Math.abs(A.sweep) >= Math.abs(B.sweep) ? A : B;
+            outer.boost = (outer.boost || 0) + 1;
+          }
+          changed = true;
+        }
+      }
+      if (!changed) break;
+      assignHugGeometry(nodes, cx, cy, R);
+    }
+
+    // Nama yang masih memakai elipsis berarti kolom teksnya kurang lebar —
+    // itu urusan R, bukan H.
+    const clipped = nodes.filter(n => n.lines.some(l => l.indexOf('…') !== -1)).length;
+    return { nodes, fits, clipped };
+  }
+
+  // Sudut tujuan, panjang sapuan, dan radius bersarang tiap jalur pelukan.
+  // Jalur yang menyapu sudut pangkal slice lain harus berada di luar jalur
+  // slice itu — kalau tidak, lengan radialnya akan menembus busur ini.
+  // Kedalamannya dicari dengan relaksasi; boost dipakai perbaikan lanjutan
+  // untuk mendorong satu jalur setingkat lagi ke luar.
+  function assignHugGeometry(nodes, cx, cy, R) {
+    const huggers = nodes.filter(n => n.hug);
+    if (!huggers.length) return;
+
+    huggers.forEach(n => {
+      const t = Math.max(-1, Math.min(1, (n.y - cy) / (R + 8)));
+      const asin = Math.asin(t);
+      // Sudut pada siluet cincin yang setinggi label, di sisi label berada.
+      n.aim = norm(n.right ? asin : Math.PI - asin);
+      // Sapuan jalur bukan cuma busurnya: ruas terakhir menuju label masih
+      // menyapu sudut-sudut sesudah ujung busur.
+      const dotA = norm(Math.atan2(n.dot.y - cy, n.dot.x - cx));
+      const dArc = norm(n.aim - n.anchor);
+      const dDot = norm(dotA - n.anchor);
+      n.sweep = (dArc >= 0) === (dDot >= 0) && Math.abs(dDot) > Math.abs(dArc) ? dDot : dArc;
+      n.depth = n.boost || 0;
+    });
+
+    for (let pass = 0; pass < huggers.length + 2; pass++) {
+      let moved = false;
+      huggers.forEach(j => nodes.forEach(i => {
+        if (i === j) return;
+        // Yang dibandingkan sudut pangkal, karena di situlah lengan radial
+        // tetangga berdiri.
+        const t = norm(i.anchor - j.anchor);
+        const swept = j.sweep >= 0 ? (t >= 0 && t <= j.sweep) : (t <= 0 && t >= j.sweep);
+        const di = i.hug ? i.depth : 0;
+        if (swept && j.depth <= di) { j.depth = di + 1; moved = true; }
+      }));
+      if (!moved) break;
+    }
+
+    // Seluruh tingkat harus muat dalam 16px: teks paling dekat mulai di R+22,
+    // jadi busur terluar pun masih punya jarak ke huruf.
+    const deepest = huggers.reduce((m, n) => Math.max(m, n.depth), 0);
+    const gap = deepest ? Math.min(3, 16 / deepest) : 3;
+    huggers.forEach(n => { n.hugR = R + 6 + n.depth * gap; });
+  }
+
+  // Titik-titik jalur seperti yang nanti digambar — untuk memeriksa
+  // persilangan sebelum benar-benar menggambarnya. Pelandaian belokannya
+  // diabaikan di sini: kurvanya tetap berada di antara lengan dan busur.
+  function calloutPath(n, cx, cy) {
+    if (n.hug) {
+      const total = norm(n.aim - n.anchor);
+      const steps = Math.max(2, Math.ceil(Math.abs(total) / 0.15));
+      const pts = [n.p0];
+      for (let k = 0; k <= steps; k++) {
+        const t = n.anchor + total * (k / steps);
+        pts.push({ x: cx + Math.cos(t) * n.hugR, y: cy + Math.sin(t) * n.hugR });
+      }
+      pts.push(n.elbow, n.dot);
+      return pts;
+    }
+    if (n.bow) return quadPoints(n.p0, n.bow, n.dot, 10);
+    return [n.p0, n.elbow, n.dot];
+  }
+
+  function segCross(p, p2, q, q2) {
+    const side = (a, b, c) => (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+    const near = (a, b) => Math.abs(a.x - b.x) < 1.5 && Math.abs(a.y - b.y) < 1.5;
+    // Ujung yang bersentuhan bukan persilangan.
+    if (near(p, q) || near(p, q2) || near(p2, q) || near(p2, q2)) return false;
+    const d1 = side(q, q2, p), d2 = side(q, q2, p2);
+    const d3 = side(p, p2, q), d4 = side(p, p2, q2);
+    return ((d1 > 0) !== (d2 > 0)) && ((d3 > 0) !== (d4 > 0));
+  }
+
+  function pathsCross(A, B) {
+    for (let i = 0; i + 1 < A.length; i++) {
+      for (let j = 0; j + 1 < B.length; j++) {
+        if (segCross(A[i], A[i + 1], B[j], B[j + 1])) return true;
+      }
+    }
+    return false;
+  }
+
+  function drawCalloutNodes(ctx, nodes, outerR, cx, cy) {
+    const LINE_H = 14;
+    const BEND = 0.35;   // radian yang dipakai untuk melandaikan tiap peralihan
 
     ctx.textBaseline = 'middle';
     nodes.forEach(n => {
       const dir = n.right ? 1 : -1;
-      const edge = outerR[n.i] + 2;
-      const x0 = cx + Math.cos(n.mid) * edge;
-      const y0 = cy + Math.sin(n.mid) * edge;
-      const xElbow = cx + dir * (R + 18);
-      const xText = cx + dir * (R + 30);
 
+      // Jalurnya sudah diputuskan planCallouts(); di sini tinggal digambar.
       ctx.beginPath();
-      ctx.moveTo(x0, y0);
-      ctx.lineTo(xElbow, n.y);
-      ctx.lineTo(xText - dir * 6, n.y);
+      ctx.moveTo(n.p0.x, n.p0.y);
+      if (n.hug) {
+        // Garis lurusnya akan menembus donut, jadi memutar menyusuri tepi
+        // cincin. Kedua peralihannya dilandaikan dengan kurva kuadratik supaya
+        // tidak ada belokan siku: titik kendalinya justru titik sudut yang
+        // dulu jadi siku, jadi kurvanya berangkat radial dari tepi slice lalu
+        // melunak jadi sejajar cincin — dan begitu pula saat melepasnya
+        // menuju label.
+        const at = t => ({ x: cx + Math.cos(t) * n.hugR, y: cy + Math.sin(t) * n.hugR });
+        const total = norm(n.aim - n.anchor);
+        const s = total < 0 ? -1 : 1;
+        const bend = Math.min(BEND, Math.abs(total) * 0.45);
+        const aIn = n.anchor + s * bend;
+        const aOut = n.aim - s * bend;
+
+        const cIn = at(n.anchor), pIn = at(aIn);
+        ctx.quadraticCurveTo(cIn.x, cIn.y, pIn.x, pIn.y);
+        if (s * norm(aOut - aIn) > 0.01) ctx.arc(cx, cy, n.hugR, aIn, aOut, s < 0);
+        const cOut = at(n.aim);
+        ctx.quadraticCurveTo(cOut.x, cOut.y, n.elbow.x, n.elbow.y);
+        ctx.lineTo(n.dot.x, n.dot.y);
+      } else if (n.bow) {
+        // Satu lengkungan tunggal langsung ke label — tanpa siku sama sekali.
+        ctx.quadraticCurveTo(n.bow.x, n.bow.y, n.dot.x, n.dot.y);
+      } else {
+        ctx.lineTo(n.elbow.x, n.elbow.y);
+        ctx.lineTo(n.dot.x, n.dot.y);
+      }
       ctx.strokeStyle = n.s.color;
       ctx.lineWidth = 1.2;
       ctx.stroke();
 
       ctx.beginPath();
-      ctx.arc(xText - dir * 6, n.y, 3, 0, Math.PI * 2);
+      ctx.arc(n.xText - dir * 6, n.y, 3, 0, Math.PI * 2);
       ctx.fillStyle = n.s.color;
       ctx.fill();
 
       ctx.textAlign = n.right ? 'left' : 'right';
-      const maxW = n.right ? CW - xText - 6 : xText - 6;
 
-      ctx.font = '600 11.5px ' + FONT;
+      // n.y adalah titik tengah blok label, jadi garis siku menunjuk ke
+      // tengahnya berapa pun jumlah barisnya.
+      const rows = n.lines.length + 1;
+      const yFirst = n.y - ((rows - 1) * LINE_H) / 2;
+
+      ctx.font = NAME_FONT;
       ctx.fillStyle = '#1a1d2e';
-      let name = n.s.name;
-      if (n.s.count) name += ' (' + n.s.count + ')';
-      ctx.fillText(clip(ctx, name, maxW), xText, n.y - 6);
+      n.lines.forEach((ln, li) => ctx.fillText(ln, n.xText, yFirst + li * LINE_H));
 
-      ctx.font = '600 11px ' + FONT;
+      ctx.font = VAL_FONT;
       ctx.fillStyle = '#6b7094';
-      ctx.fillText(clip(ctx, fmtItemVal(s, n.s.val), maxW), xText, n.y + 7);
+      ctx.fillText(n.valText, n.xText, yFirst + n.lines.length * LINE_H);
     });
+  }
+
+  // Memecah teks jadi paling banyak maxLines baris selebar maxW. Pemenggalan
+  // di spasi, sehingga nama panjang ditulis utuh bertingkat, bukan dipotong.
+  // Elipsis hanya muncul di dua kasus sisa: satu kata tunggal yang sendirian
+  // saja lebih lebar dari kolomnya, dan teks yang bahkan setelah maxLines
+  // baris masih bersisa.
+  function wrapText(ctx, text, maxW, maxLines) {
+    if (maxW <= 8) return [];
+    const words = String(text).split(/\s+/).filter(Boolean);
+    if (!words.length) return [];
+
+    const lines = [];
+    let cur = '';
+    for (const w of words) {
+      const cand = cur ? cur + ' ' + w : w;
+      if (!cur || ctx.measureText(cand).width <= maxW) { cur = cand; continue; }
+      lines.push(cur);
+      cur = w;
+    }
+    lines.push(cur);
+
+    const out = lines.slice(0, maxLines);
+    // Sisa baris digabung ke baris terakhir supaya potongannya jatuh di
+    // ujung nama, bukan menghilangkan kata-kata terakhir tanpa jejak.
+    if (lines.length > maxLines) out[maxLines - 1] = lines.slice(maxLines - 1).join(' ');
+    return out.map(l => clip(ctx, l, maxW));
   }
 
   function clip(ctx, text, maxW) {
@@ -788,31 +1332,6 @@ const CutUpPage = (() => {
     let s = text;
     while (s.length > 1 && ctx.measureText(s + '…').width > maxW) s = s.slice(0, -1);
     return s + '…';
-  }
-
-  function onCanvasMove(e) {
-    if (!cuLayout) return;
-    const rect = cuCanvas.getBoundingClientRect();
-    const mx = e.clientX - rect.left, my = e.clientY - rect.top;
-    const dx = mx - cuLayout.cx, dy = my - cuLayout.cy;
-    const dist = Math.hypot(dx, dy);
-
-    // Sudut dinormalkan ke [-π/2, 3π/2) supaya sebanding dengan a0/a1 yang
-    // mulai dari jam 12.
-    let ang = Math.atan2(dy, dx);
-    if (ang < -Math.PI / 2) ang += Math.PI * 2;
-    const idx = cuLayout.angles.findIndex(a => ang >= a.a0 && ang < a.a1);
-    // Kedua batas beda-beda tiap slice sekarang, jadi jaraknya diuji ke
-    // cincin slice yang bersangkutan — bukan ke satu lubang dan satu R
-    // global. Tanpa ini, ruang kosong di dalam maupun di luar slice tipis
-    // ikut terbaca sebagai hover.
-    const hit = (idx !== -1 && dist >= cuLayout.innerR[idx] && dist <= cuLayout.outerR[idx] + 7)
-      ? idx : -1;
-    if (hit !== cuHover) {
-      cuHover = hit;
-      cuCanvas.style.cursor = hit === -1 ? 'default' : 'pointer';
-      drawDonut();
-    }
   }
 
   // ═══════════════════════════════════════

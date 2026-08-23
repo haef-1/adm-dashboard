@@ -3587,20 +3587,25 @@
   gap: 6px;
 }
 
+/* align-items:flex-start, bukan center: nama boleh jadi dua-tiga baris, dan
+   dot serta nilainya harus tetap sejajar baris pertamanya — bukan melayang
+   di tengah blok nama. */
 .cu-leg {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
   font-size: 12px;
+  line-height: 1.35;
 }
 
+/* Nama item ditulis utuh: membungkus ke baris berikutnya, tidak dipotong
+   elipsis. Legend inilah tempat nama panjang dibaca lengkap saat kanvas
+   terlalu sempit untuk callout. */
 .cu-leg-name {
   color: var(--text-mid);
   flex: 1;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .cu-leg-val {
@@ -3609,6 +3614,7 @@
   font-weight: 700;
   color: var(--text);
   white-space: nowrap;
+  padding-top: 1px;
 }
 
 .cu-dot {
@@ -3617,6 +3623,7 @@
   border-radius: 50%;
   flex-shrink: 0;
   display: inline-block;
+  margin-top: 3px;   /* turun sedikit agar segaris dengan baris pertama nama */
 }
 
 /* ── Tabel ── */
@@ -3659,20 +3666,48 @@
   white-space: nowrap;
 }
 
+/* nowrap supaya tiap baris setinggi satu baris teks. Nama yang lebih panjang
+   dari kolomnya dipotong elipsis, bukan melebarkan tabel — atribut title di
+   setiap sel menyimpan nama utuhnya. */
 .cu-td-name {
   color: var(--text);
   font-weight: 600;
-  display: flex;
-  align-items: center;
-  gap: 7px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
+/* Baris agregat "Item Lainnya": dibedakan hanya lewat garis pemisah di
+   atasnya. Warna teksnya sengaja dibiarkan sama dengan lima baris di atasnya
+   — angkanya sama pentingnya, jadi meredupkannya justru membuat baris ini
+   terbaca seperti tidak aktif. */
+.cu-row-other td {
+  border-top: 1px solid var(--border);
+}
+
+/* Kolom angka: selnya rata tengah, tapi nilainya duduk di dalam kotak
+   inline-block selebar tetap (satuan ch, fontnya monospace jadi lebarnya
+   pasti) yang isinya rata kanan. Hasilnya digit tetap sejajar antar baris
+   seperti rata kanan biasa, tapi blok angkanya berada di tengah kolom —
+   sejajar dengan judul kolomnya, bukan menempel jauh ke tepi kanan. */
 .cu-num {
-  text-align: right;
+  text-align: center;
   font-family: var(--font-mono);
   font-weight: 600;
   white-space: nowrap;
 }
+
+.cu-num-val {
+  display: inline-block;
+  max-width: 100%;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+}
+
+.cu-num-qty { min-width: 9ch; }
+.cu-num-pct { min-width: 6ch; }
 
 .cu-td-empty {
   padding: 32px 10px;
@@ -3681,24 +3716,27 @@
   border-bottom: none;
 }
 
+/* Tautan teks, bukan tombol blok: aksinya sekunder terhadap tabelnya, jadi
+   tidak perlu bidang warna selebar kartu. display:block + margin-right auto
+   membuat area kliknya selebar teksnya saja dan tetap menempel di kiri. */
 .cu-more-btn {
-  width: 100%;
-  margin-top: 12px;
-  padding: 11px 14px;
+  display: block;
+  margin: 10px auto 0 0;
+  padding: 2px 0;
   border: none;
-  border-radius: var(--radius-md);
-  background: var(--blue);
-  color: #fff;
+  background: none;
+  color: var(--blue);
   font-family: var(--font-body);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
+  font-size: 11px;
+  font-weight: 600;
+  font-style: italic;
+  text-align: left;
+  text-decoration: underline;
   cursor: pointer;
-  transition: background var(--transition);
+  transition: color var(--transition);
 }
 
-.cu-more-btn:hover { background: #2f6ac4; }
+.cu-more-btn:hover { color: #2f6ac4; }
 
 /* Di layar lebar donut dan tabel jadi teregang sampai kehilangan bentuk
    sejak keduanya menempati satu kartu selebar halaman. Kedua section
@@ -3716,6 +3754,50 @@
    seperti di Overview. */
 @media (max-width: 760px) {
   .cu-body { padding: 0 14px 16px; }
+}
+
+/* Tabel detail di layar ponsel: harus muat utuh tanpa geser horizontal.
+   table-layout:fixed membuat lebar kolom dipatok dari baris header, jadi
+   kolom Nama Item bisa dikunci 40vw dan sisanya dibagi rata untuk kedua
+   kolom angka — isi yang kepanjangan dipotong elipsis di dalam selnya,
+   bukan mendorong tabel melebihi kartu. */
+@media (max-width: 600px) {
+  .cu-table {
+    table-layout: fixed;
+    font-size: 11px;
+  }
+
+  .cu-table th {
+    font-size: 10px;
+    padding: 6px 5px;
+    white-space: normal;   /* "Jumlah (KG)" / "Persentase (%)" boleh 2 baris */
+    line-height: 1.25;
+  }
+
+  .cu-table td {
+    padding: 7px 5px;
+  }
+
+  .cu-th-no { width: 22px; }
+
+  .cu-table th:nth-child(2),
+  .cu-td-name { width: 40vw; }
+
+  .cu-num {
+    font-size: 10.5px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Kolom angka tinggal ~60px setelah Nama Item mengambil 40vw, jadi kotak
+     nilainya sedikit dipersempit supaya tetap muat utuh di dalam sel. */
+  .cu-num-qty { min-width: 8ch; }
+  .cu-num-pct { min-width: 6ch; }
+
+  .cu-more-btn {
+    margin-top: 8px;
+    font-size: 10.5px;
+  }
 }
 
 @media (max-width: 420px) {
