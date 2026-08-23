@@ -675,7 +675,9 @@ const CutUpPage = (() => {
       const mid = (a0 + a1) / 2;
       const rr = (innerR[i] + outerR[i]) / 2;
       ctx.fillStyle = '#fff';
-      ctx.font = '700 13px ' + FONT;
+      // Cincinnya ikut menyempit di kanvas sempit, jadi angkanya dikecilkan
+      // bersama teks callout — kalau tidak, persennya hampir setebal cincin.
+      ctx.font = CALLOUT_TYPE[oneSided || legendOnly ? 'narrow' : 'wide'].pct;
       ctx.fillText(Math.round(sl.pct) + '%', cx + Math.cos(mid) * rr, cy + Math.sin(mid) * rr);
     });
 
@@ -708,7 +710,7 @@ const CutUpPage = (() => {
     }
     legendEl.innerHTML = '';
 
-    drawCalloutNodes(ctx, plan.nodes, outerR, cx, cy);
+    drawCalloutNodes(ctx, plan.nodes, outerR, cx, cy, plan.type);
   }
 
   // Geometri cincin untuk satu kandidat ukuran (pusat + R).
@@ -807,6 +809,15 @@ const CutUpPage = (() => {
 
   const NAME_FONT = '600 11.5px ' + FONT;
   const VAL_FONT = '600 11px ' + FONT;
+
+  // Ukuran teks callout. Di kanvas sempit huruf dikecilkan — bukan cuma biar
+  // tidak sesak: tiap piksel lebar kolom di sana mahal, dan huruf yang lebih
+  // kecil membuat lebih banyak karakter muat per baris, sehingga nama utuh
+  // lebih sering tercapai tanpa mengecilkan donutnya.
+  const CALLOUT_TYPE = {
+    wide: { name: NAME_FONT, val: VAL_FONT, lineH: 14, pct: '700 13px ' + FONT },
+    narrow: { name: '600 10px ' + FONT, val: '600 9px ' + FONT, lineH: 12, pct: '700 11px ' + FONT },
+  };
   const NAME_LINES_MAX = 2;
 
   // Sudut dinormalkan ke (-π, π] — dipakai untuk membandingkan arah dan
@@ -886,7 +897,9 @@ const CutUpPage = (() => {
   // mencoba beberapa ukuran sebelum memutuskan.
   function planCallouts(ctx, s, slices, angles, geom, R, H, CW, oneSided) {
     const { cx, cy, outerR } = geom;
-    const LINE_H = 14, PAD = 10, MARGIN = 10;
+    const type = CALLOUT_TYPE[oneSided ? 'narrow' : 'wide'];
+    const LINE_H = type.lineH;
+    const PAD = 10, MARGIN = 10;
     const LEAD = 18;    // panjang lengan siku di luar tepi slice
     const STUB = 12;    // jarak siku → awal teks
     const CLEAR = 10;   // jarak aman teks dari siluet donut
@@ -977,13 +990,13 @@ const CutUpPage = (() => {
       n.xText = cx + dir * (off + STUB);
       n.maxW = (n.right ? CW - n.xText : n.xText) - 6;
 
-      ctx.font = NAME_FONT;
+      ctx.font = type.name;
       n.lines = wrapText(ctx, n.name, n.maxW, NAME_LINES_MAX);
       n.h = (n.lines.length + 1) * LINE_H;
       let w = 0;
       n.lines.forEach(l => { w = Math.max(w, ctx.measureText(l).width); });
 
-      ctx.font = VAL_FONT;
+      ctx.font = type.val;
       n.valText = clip(ctx, n.val, n.maxW);
       n.w = Math.max(w, ctx.measureText(n.valText).width);
     }
@@ -1150,7 +1163,7 @@ const CutUpPage = (() => {
     // Nama yang masih memakai elipsis berarti kolom teksnya kurang lebar —
     // itu urusan R, bukan H.
     const clipped = nodes.filter(n => n.lines.some(l => l.indexOf('…') !== -1)).length;
-    return { nodes, fits, clipped };
+    return { nodes, fits, clipped, type };
   }
 
   // Sudut tujuan, panjang sapuan, dan radius bersarang tiap jalur pelukan.
@@ -1235,8 +1248,8 @@ const CutUpPage = (() => {
     return false;
   }
 
-  function drawCalloutNodes(ctx, nodes, outerR, cx, cy) {
-    const LINE_H = 14;
+  function drawCalloutNodes(ctx, nodes, outerR, cx, cy, type) {
+    const LINE_H = type.lineH;
     const BEND = 0.35;   // radian yang dipakai untuk melandaikan tiap peralihan
 
     ctx.textBaseline = 'middle';
@@ -1289,11 +1302,11 @@ const CutUpPage = (() => {
       const rows = n.lines.length + 1;
       const yFirst = n.y - ((rows - 1) * LINE_H) / 2;
 
-      ctx.font = NAME_FONT;
+      ctx.font = type.name;
       ctx.fillStyle = '#1a1d2e';
       n.lines.forEach((ln, li) => ctx.fillText(ln, n.xText, yFirst + li * LINE_H));
 
-      ctx.font = VAL_FONT;
+      ctx.font = type.val;
       ctx.fillStyle = '#6b7094';
       ctx.fillText(n.valText, n.xText, yFirst + n.lines.length * LINE_H);
     });

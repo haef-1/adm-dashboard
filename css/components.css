@@ -3528,12 +3528,27 @@
 }
 
 /* ── Donut + tabel ── */
+/* Tanpa garis tepi dan tanpa latar sendiri: .section di luarnya sudah punya
+   keduanya, jadi kartu ini cuma menggandakan rusuk yang sama. Padding
+   horizontalnya juga dilepas — bersama .cu-body di bawah, itu mengembalikan
+   ~76px lebar ke kanvas donut, yang langsung dipakai label. */
 .cu-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: 16px 18px 14px;
+  padding: 14px 0 12px;
   min-width: 0;
+}
+
+#cuChartSection .cu-body {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+/* Kanvasnya boleh mepet ke tepi section, teksnya tidak: judul, legend, dan
+   tabel tetap sebaris dengan judul section di atasnya. */
+.cu-card-head,
+.cu-donut-legend:not(:empty),
+.cu-detail {
+  padding-left: 20px;
+  padding-right: 20px;
 }
 
 .cu-card-head {
@@ -3754,6 +3769,13 @@
    seperti di Overview. */
 @media (max-width: 760px) {
   .cu-body { padding: 0 14px 16px; }
+
+  .cu-card-head,
+  .cu-donut-legend:not(:empty),
+  .cu-detail {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
 }
 
 /* Tabel detail di layar ponsel: harus muat utuh tanpa geser horizontal.
@@ -3801,5 +3823,12 @@
 }
 
 @media (max-width: 420px) {
-  .cu-card { padding: 14px 12px 12px; }
+  .cu-card { padding: 12px 0 10px; }
+
+  .cu-card-head,
+  .cu-donut-legend:not(:empty),
+  .cu-detail {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
 }
