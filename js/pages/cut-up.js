@@ -13,6 +13,22 @@ const CutUpPage = (() => {
 
   const TOP_N = 5;
   const FONT = "'Plus Jakarta Sans', Helvetica, Arial, sans-serif";
+  const MONO = "'JetBrains Mono', ui-monospace, monospace";
+
+  // ── Chart KPI ──
+  const KPI_BARS = 7;   // periode terbanyak yang digambar
+  // Lolos validator palet: pita lightness, chroma, pemisahan CVD (ΔE 24,7
+  // deutan), dan penglihatan normal (ΔE 30,8). Kontras kuning terhadap latar
+  // 2,14:1 — di bawah 3:1, ditebus label nilai yang tercetak di tiap batang.
+  //
+  // Yield tidak bisa tetap oranye begitu Hasil jadi kuning: pasangan itu cuma
+  // terpisah ΔE 5,9 di mata deutan dan 14,7 di mata normal — praktis satu
+  // warna. Crimson dipilih karena terpisah jauh dari keduanya dan bukan merah
+  // status, yang warnanya disimpan untuk penanda bahaya.
+  const KPI_COLORS = { bahan: '#3b7ddd', hasil: '#e0a500', yield: '#c2255c' };
+  // Batas bawah posisi titik yield terendah, sebagai pecahan tinggi plot.
+  const DOT_FLOOR = 0.45;
+  const AXIS_LINE = '#e2e5ef';   // = --border
 
   // Ukuran kanvas donut. H_BASE dan R hasil hitungan lebar adalah titik
   // berangkat, bukan harga mati: keduanya dikoreksi fitCallouts() sesuai
@@ -60,14 +76,21 @@ const CutUpPage = (() => {
   // KPI dan chart punya filter sendiri-sendiri: mengubah tanggal di satu
   // section tidak menggeser yang lain, sama seperti Overview yang memisahkan
   // navigasi tanggal KPI dari kontrol grafik Bahan.
+  //
+  // win = lebar jendela tetap dalam hari produksi. Section KPI memakainya
+  // karena chartnya memang bekerja dalam jendela 7 periode: tombol ‹ › selalu
+  // melangkah selebar itu, dan jendelanya selalu kembali selebar itu berapa
+  // pun rentang yang terakhir dipilih di picker. Section donut tidak punya
+  // lebar tetap — jendelanya persis seperti yang dipilih.
   const SC = {
-    kpi:   { key: 'kpi',   unit: 'kg', pv: 'AYAM BARU',   from: null, to: null },
-    chart: { key: 'chart', unit: 'kg', pv: 'AYAM PROSES', from: null, to: null },
+    kpi:   { key: 'kpi',   unit: 'kg', pv: 'AYAM BARU',   from: null, to: null, win: KPI_BARS },
+    chart: { key: 'chart', unit: 'kg', pv: 'AYAM PROSES', from: null, to: null, win: 0 },
   };
 
   let cuExpanded = false;
   let cuDetailOpen = false;   // tabel menggantikan donut
   let cuCanvas = null, cuRo = null;
+  let _kpiChart = null, _kpiActive = -1, _kpiPinned = false;
   let _rangeDocListener = null, _rangeScrollListener = null;
   let _datesCache = null, _datesRawLen = -1;
   let _aggCache = new Map(), _aggRawLen = -1;
@@ -100,22 +123,15 @@ const CutUpPage = (() => {
     return _datesCache;
   }
 
+  // Tanpa rentang tersimpan, section berjendela tetap mundur selebar
+  // jendelanya (KPI: 7 hari produksi terakhir) dan section biasa mengambil
+  // hari terakhir saja. Bawaannya ditaruh di sini, bukan di render(), supaya
+  // tombol Reset di picker ikut kembali ke bawaan yang sama.
   function rangeDates(s) {
     const dates = cuAllDates();
     if (!dates.length) return [];
-    if (!s.from || !s.to) return [dates[dates.length - 1]];
+    if (!s.from || !s.to) return dates.slice(-(s.win || 1));
     return dates.filter(d => d >= s.from && d <= s.to);
-  }
-
-  // Jendela sebelumnya dengan panjang yang sama, dihitung dalam hari produksi
-  // (bukan hari kalender) supaya libur tidak menggeser pembandingnya.
-  function prevRangeDates(s) {
-    const dates = cuAllDates();
-    const cur = rangeDates(s);
-    if (!cur.length) return [];
-    const end = dates.indexOf(cur[0]) - 1;
-    if (end < 0) return [];
-    return dates.slice(Math.max(0, end - cur.length + 1), end + 1);
   }
 
   // Satu lintasan atas baris CUT UP: total BAHAN, total HASIL, dan rincian
@@ -262,14 +278,17 @@ const CutUpPage = (() => {
   //  RENDER
   // ═══════════════════════════════════════
 
-  function controlsHtml(s) {
+  // withUnit false untuk section KPI: sumbu kirinya memang kg, dan yield di
+  // CUT UP selalu berbasis kg, jadi toggle BRD/KG di situ tidak berarti apa-apa.
+  function controlsHtml(s, withUnit) {
     return `
       <div class="section-header cu-header">
         <div class="section-header-controls cu-controls">
+          ${withUnit ? `
           <div class="toggle-group" id="${eid(s, 'MetricToggle')}">
             <button class="toggle-btn" data-metric="brd">BRD</button>
             <button class="toggle-btn" data-metric="kg">KG</button>
-          </div>
+          </div>` : ''}
           <div id="${eid(s, 'PvWrap')}"></div>
           <div class="spacer"></div>
           <div id="${eid(s, 'RangeNav')}"></div>
@@ -279,7 +298,7 @@ const CutUpPage = (() => {
 
   function bindControls(s, onChange) {
     const toggle = el(s, 'MetricToggle');
-    toggle.querySelectorAll('.toggle-btn').forEach(btn => {
+    if (toggle) toggle.querySelectorAll('.toggle-btn').forEach(btn => {
       btn.classList.toggle('active', btn.dataset.metric === s.unit);
       btn.addEventListener('click', () => {
         s.unit = btn.dataset.metric;
@@ -307,18 +326,30 @@ const CutUpPage = (() => {
       if (s.from && s.to && !dates.some(d => d >= s.from && d <= s.to)) { s.from = null; s.to = null; }
     });
 
+
     container.innerHTML = `
       <div class="page-title">Cut Up</div>
 
       <div class="section" id="cuKpiSection">
-        ${controlsHtml(SC.kpi)}
+        ${controlsHtml(SC.kpi, false)}
         <div class="cu-body">
-          <div class="kpi-row cu-kpi-row" id="cuKpiRow"></div>
+          <div class="cu-kpi-wrap" id="cuKpiWrap"><canvas id="cuKpiCanvas"></canvas></div>
+          <!-- Legend HTML, bukan legend bawaan Chart.js: tiga seri berarti
+               identitasnya tidak boleh bersandar pada warna saja. Satuan tiap
+               sumbu tidak ikut di sini — digambar di ujung atas garis
+               sumbunya masing-masing. -->
+          <div class="cu-kpi-legend">
+            <span class="cu-leg-key"><i style="background:${KPI_COLORS.bahan}"></i>Bahan</span>
+            <span class="cu-leg-key"><i style="background:${KPI_COLORS.hasil}"></i>Hasil</span>
+            <span class="cu-leg-key"><i class="dot" style="background:${KPI_COLORS.yield}"></i>Yield</span>
+          </div>
+          <div class="cu-kpi-note" id="cuKpiNote"></div>
+          <div class="cu-empty" id="cuKpiEmpty">Tidak ada data untuk periode ini</div>
         </div>
       </div>
 
       <div class="section" id="cuChartSection">
-        ${controlsHtml(SC.chart)}
+        ${controlsHtml(SC.chart, true)}
         <div class="cu-body">
           <div class="cu-card" id="cuProdukCard">
             <div class="cu-card-head">
@@ -383,7 +414,7 @@ const CutUpPage = (() => {
 
   function refreshKpi() {
     renderRangeNav(SC.kpi, refreshKpi);
-    renderKpis();
+    renderKpiChart();
   }
 
   function refreshChart() {
@@ -411,6 +442,7 @@ const CutUpPage = (() => {
     closeRangePicker();
     if (cuRo) { cuRo.disconnect(); cuRo = null; }
     cuCanvas = null;
+    destroyKpiChart();
   }
 
   // ── Navigasi rentang ──
@@ -422,15 +454,23 @@ const CutUpPage = (() => {
     const atStart = !cur.length || dates.indexOf(cur[0]) <= 0;
     const atEnd = !cur.length || dates.indexOf(cur[cur.length - 1]) >= dates.length - 1;
 
-    nav.innerHTML = `
+    // Section berjendela tetap tidak punya tombol geser — cukup tombol
+    // rentangnya saja, seperti grafik persebaran bahan di Overview. Jendelanya
+    // memang selalu 7 periode terakhir, jadi menggesernya per hari tidak
+    // berarti apa-apa untuk chartnya.
+    nav.innerHTML = s.win
+      ? `<button class="chart-range-btn" id="${eid(s, 'RangeBtn')}">${esc(rangeLabel(s))}</button>`
+      : `
       <div class="date-nav cu-range-nav">
         <button class="date-nav-btn" id="${eid(s, 'Prev')}" ${atStart ? 'disabled' : ''}>‹</button>
         <button class="chart-range-btn" id="${eid(s, 'RangeBtn')}">${esc(rangeLabel(s))}</button>
         <button class="date-nav-btn" id="${eid(s, 'Next')}" ${atEnd ? 'disabled' : ''}>›</button>
       </div>`;
 
-    el(s, 'Prev').addEventListener('click', () => shift(s, -1, onChange));
-    el(s, 'Next').addEventListener('click', () => shift(s, 1, onChange));
+    if (!s.win) {
+      el(s, 'Prev').addEventListener('click', () => shift(s, -1, onChange));
+      el(s, 'Next').addEventListener('click', () => shift(s, 1, onChange));
+    }
     el(s, 'RangeBtn').addEventListener('click', e => {
       e.stopPropagation();
       openRangePicker(s, onChange);
@@ -438,6 +478,7 @@ const CutUpPage = (() => {
   }
 
   // Geser jendela sejauh panjangnya sendiri, dihitung dalam hari produksi.
+  // Hanya dipakai section donut; section KPI tidak punya tombol geser.
   function shift(s, dir, onChange) {
     const dates = cuAllDates();
     const cur = rangeDates(s);
@@ -461,50 +502,394 @@ const CutUpPage = (() => {
   //  KPI
   // ═══════════════════════════════════════
 
-  // Kartu KPI memakai kelas bersama .kpi-card dari halaman Overview supaya
-  // keduanya bergerak bareng kalau stylenya diubah — termasuk pil delta
-  // lewat KPI.formatDelta, jadi arah panah dan warnanya konsisten.
-  function kpiCard(label, valueHtml, delta) {
-    return `
-      <div class="kpi-card">
-        <div class="kpi-card-label">${label}</div>
-        <div class="kpi-card-body">
-          <span class="kpi-card-value">${valueHtml}</span>
-          ${delta ? `<span class="kpi-card-delta ${delta.cls}">${delta.text}</span>` : ''}
-        </div>
-      </div>`;
+  // Satu titik data per periode. Yield dihitung dari jumlahnya, bukan dari
+  // rata-rata yield harian: merata-ratakan rasio memberi angka yang salah
+  // begitu volume tiap hari tidak sama.
+  function kpiSeries(s) {
+    const all = rangeDates(s);
+    const dates = all.slice(-KPI_BARS);
+    return {
+      hidden: all.length - dates.length,
+      points: dates.map(d => {
+        const agg = cuAggregate([d], s.pv);
+        return {
+          date: d,
+          label: fmtDateShort(d),
+          bahan: agg.bahanKg,
+          hasil: agg.hasilKg,
+          yield: cuYield(agg),
+        };
+      }),
+    };
   }
 
-  function renderKpis() {
-    const row = document.getElementById('cuKpiRow');
-    if (!row) return;
-    const s = SC.kpi;
+  // Membulatkan ke atas ke angka yang enak dibaca. Langkahnya sengaja rapat:
+  // dengan tangga 1/2/2,5/5 yang lazim, batas 26.154 melompat ke 50.000 dan
+  // batangnya tergencet jadi separuh tinggi yang seharusnya.
+  const NICE_STEPS = [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10];
 
-    const agg = cuAggregate(rangeDates(s), s.pv);
-    const y = cuYield(agg);
-    const waste = y === null ? null : 100 - y;
+  function niceCeil(v) {
+    if (!(v > 0)) return 1;
+    const mag = Math.pow(10, Math.floor(Math.log10(v)));
+    const f = v / mag;
+    return (NICE_STEPS.find(st => f <= st + 1e-9) || 10) * mag;
+  }
 
-    const prev = prevRangeDates(s);
-    const prevAgg = prev.length ? cuAggregate(prev, s.pv) : null;
-    const prevY = prevAgg ? cuYield(prevAgg) : null;
-    const prevWaste = prevY === null ? null : 100 - prevY;
+  // Batas kedua sumbu. Sumbu kanan mengikuti aturan yang diminta apa adanya
+  // — yield terendah −1, tertinggi +0,5 — dan yang menyesuaikan justru sumbu
+  // kirinya: batas atasnya dinaikkan sampai puncak batang tertinggi berada di
+  // bawah titik yield terendah. Jadi "titik selalu di atas batang" berlaku
+  // tanpa mengutak-atik skala persennya.
+  function kpiScales(points) {
+    const bars = points.reduce((m, p) => Math.max(m, p.bahan, p.hasil), 0);
+    const ys = points.map(p => p.yield).filter(v => v !== null);
 
-    const bahan = s.unit === 'brd' ? agg.bahanBrd : agg.bahanKg;
-    const hasil = s.unit === 'brd' ? agg.hasilBrd : agg.hasilKg;
-    const prevBahan = prevAgg ? (s.unit === 'brd' ? prevAgg.bahanBrd : prevAgg.bahanKg) : null;
-    const prevHasil = prevAgg ? (s.unit === 'brd' ? prevAgg.hasilBrd : prevAgg.hasilKg) : null;
+    if (!ys.length) return { y1max: niceCeil(bars * 1.25) || 1, y2min: 0, y2max: 100 };
 
-    const u = unitLabel(s);
-    row.innerHTML =
-      // Waste dibalik: naik berarti buruk, jadi pilnya merah walau angkanya naik.
-      kpiCard('Yield', (y === null ? '--' : y.toFixed(2)) + '<span class="unit">%</span>',
-        y === null ? null : KPI.formatDelta(y, prevY, false)) +
-      kpiCard('Waste', (waste === null ? '--' : waste.toFixed(2)) + '<span class="unit">%</span>',
-        waste === null ? null : KPI.formatDelta(waste, prevWaste, true)) +
-      kpiCard('Total Bahan', fmtNum(bahan) + '<span class="unit">' + u + '</span>',
-        prevBahan === null ? null : KPI.formatDeltaInt(Math.round(bahan), Math.round(prevBahan))) +
-      kpiCard('Total Hasil', fmtNum(hasil) + '<span class="unit">' + u + '</span>',
-        prevHasil === null ? null : KPI.formatDeltaInt(Math.round(hasil), Math.round(prevHasil)));
+    const lo = Math.min(...ys), hi = Math.max(...ys);
+    const y2max = Math.min(100, hi + 0.1);
+    let y2min = Math.max(0, lo - 1);
+
+    // −1 di bawah yield terendah cukup selama sebaran antar periode sempit,
+    // dan memang itu keadaan normalnya. Tapi kalau sebarannya lebar, jendela
+    // sesempit itu menaruh titik terendah nyaris di dasar plot — dan tidak ada
+    // batas y1 yang bisa menaruh batang di bawahnya tanpa memipihkannya jadi
+    // sisa. Jadi jendelanya dilebarkan ke bawah secukupnya sampai titik
+    // terendah duduk di DOT_FLOOR tinggi plot. Pada sebaran ≤1,2pp rumus −1
+    // sudah memenuhi syarat ini, jadi angkanya tidak berubah.
+    const need = (DOT_FLOOR / (1 - DOT_FLOOR)) * (y2max - lo);
+    if (lo - y2min < need) y2min = Math.max(0, lo - need);
+
+    // Posisi titik terendah sebagai pecahan tinggi plot, lalu batas atas
+    // sumbu kiri dipilih supaya puncak batang tertinggi berada tepat di
+    // bawahnya. Jaraknya cukup 0,02 (≈4px pada plot 200px) — sekadar tidak
+    // bersentuhan; lebih dari itu hanya menyisakan pita kosong di tengah.
+    const lowest = (lo - y2min) / Math.max(0.001, y2max - y2min);
+    const room = Math.max(0.15, lowest - 0.02);
+    return { y1max: niceCeil(Math.max(bars / room, bars * 1.15)) || 1, y2min, y2max };
+  }
+
+  function renderKpiChart() {
+    const wrap = document.getElementById('cuKpiWrap');
+    const canvas = document.getElementById('cuKpiCanvas');
+    const empty = document.getElementById('cuKpiEmpty');
+    const note = document.getElementById('cuKpiNote');
+    if (!wrap || !canvas || !empty) return;
+
+    const { points, hidden } = kpiSeries(SC.kpi);
+    const hasData = points.some(p => p.bahan > 0 || p.hasil > 0);
+
+    wrap.style.display = hasData ? '' : 'none';
+    empty.style.display = hasData ? 'none' : 'block';
+    if (note) {
+      note.textContent = hidden > 0
+        ? 'Menampilkan ' + points.length + ' hari produksi terakhir dari ' + (points.length + hidden) + ' hari terpilih'
+        : '';
+    }
+    if (!hasData) { destroyKpiChart(); return; }
+
+    const sc = kpiScales(points);
+    const cfg = kpiChartConfig(points, sc);
+
+    // Chart.js hanya dibuat sekali; pembaruan berikutnya menimpa datanya
+    // supaya batangnya bergerak, bukan berkedip dari nol.
+    if (_kpiChart) {
+      _kpiChart.data.labels = cfg.data.labels;
+      cfg.data.datasets.forEach((ds, i) => { _kpiChart.data.datasets[i].data = ds.data; });
+      _kpiChart.options.scales.y.max = sc.y1max;
+      _kpiChart.options.scales.y2.min = sc.y2min;
+      _kpiChart.options.scales.y2.max = sc.y2max;
+      _kpiChart.$cuPoints = points;
+      _kpiChart.update();
+      return;
+    }
+    _kpiChart = new Chart(canvas.getContext('2d'), cfg);
+    _kpiChart.$cuPoints = points;
+
+    // onHover tidak pernah terpanggil saat kursor keluar kanvas, jadi garis
+    // bidiknya harus dibersihkan sendiri — kecuali sedang dikunci lewat tap.
+    canvas.addEventListener('mouseleave', () => {
+      if (_kpiPinned || _kpiActive === -1) return;
+      _kpiActive = -1;
+      if (_kpiChart) _kpiChart.draw();
+    });
+  }
+
+  function destroyKpiChart() {
+    if (_kpiChart) { _kpiChart.destroy(); _kpiChart = null; }
+    _kpiActive = -1;
+    _kpiPinned = false;
+  }
+
+  // Tinta label di dalam batang mengikuti terang-gelap warna batangnya, tidak
+  // dipatok putih: angka putih di atas batang kuning nyaris tak terbaca.
+  function inkOn(hex) {
+    const n = parseInt(hex.slice(1), 16);
+    const lin = v => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4); };
+    const lum = 0.2126 * lin((n >> 16) & 255) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255);
+    return lum > 0.4 ? '#1a1d2e' : '#fff';
+  }
+
+  function roundRectPath(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  // Nilai tiap batang, ditulis tegak di atas batangnya. Tegak karena dengan 7
+  // periode × 2 batang, angka mendatar pasti bertabrakan di layar ponsel.
+  // Warnanya tinta redup, bukan warna serinya — identitas seri sudah dibawa
+  // batangnya sendiri.
+  const kpiBarLabelPlugin = {
+    id: 'cuKpiBarLabels',
+    afterDatasetsDraw(chart) {
+      const { ctx, chartArea } = chart;
+
+      ctx.save();
+      ctx.font = '700 9px ' + MONO;
+      ctx.textBaseline = 'middle';
+
+      // Satuan tiap sumbu, di ujung atas garisnya masing-masing.
+      ctx.fillStyle = '#9498b3';
+      ctx.textAlign = 'left';
+      ctx.fillText('kg', chartArea.left, chartArea.top - 10);
+      ctx.textAlign = 'right';
+      ctx.fillText('%', chartArea.right, chartArea.top - 10);
+
+      [0, 1].forEach(di => {
+        const meta = chart.getDatasetMeta(di);
+        if (meta.hidden) return;
+        meta.data.forEach((bar, i) => {
+          const v = chart.data.datasets[di].data[i];
+          if (!v) return;
+          const text = fmtNum(v);
+          const w = ctx.measureText(text).width;
+          const barH = bar.base - bar.y;
+
+          if (barH >= w + 14) {
+            // Muat di dalam batang: menempel di bawah ujung atasnya. textAlign
+            // right membuat teks memanjang ke bawah setelah diputar.
+            ctx.save();
+            ctx.fillStyle = inkOn(chart.data.datasets[di].backgroundColor);
+            ctx.textAlign = 'right';
+            ctx.translate(bar.x, bar.y + 7);
+            ctx.rotate(-Math.PI / 2);
+            ctx.fillText(text, 0, 0);
+            ctx.restore();
+            return;
+          }
+
+          // Batang terlalu pendek untuk memuat angkanya — ditulis di atasnya
+          // dengan tinta redup daripada dihilangkan. Batasnya tepi kanvas,
+          // bukan tepi plot: strip padding di atas plot memang untuk ini.
+          if (bar.y - 4 < w + 8) return;
+          ctx.save();
+          ctx.fillStyle = '#6b7094';
+          ctx.textAlign = 'left';
+          ctx.translate(bar.x, bar.y - 6);
+          ctx.rotate(-Math.PI / 2);
+          ctx.fillText(text, 0, 0);
+          ctx.restore();
+        });
+      });
+      ctx.restore();
+    },
+  };
+
+  // Garis bidik + popup kecil di titik yield periode aktif. Tooltip bawaan
+  // Chart.js dimatikan supaya isinya bisa dipilih sendiri — sama seperti
+  // grafik Trafic Bahan di Overview.
+  const kpiCrosshairPlugin = {
+    id: 'cuKpiCrosshair',
+    afterDatasetsDraw(chart) {
+      const pts = chart.$cuPoints || [];
+      const p = pts[_kpiActive];
+      if (!p) return;
+      const { ctx, chartArea, scales } = chart;
+      const x = scales.x.getPixelForValue(_kpiActive);
+
+      ctx.save();
+      ctx.strokeStyle = 'rgba(26,29,46,0.16)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath();
+      ctx.moveTo(x, chartArea.top);
+      ctx.lineTo(x, chartArea.bottom);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      if (p.yield === null) { ctx.restore(); return; }
+      const y = scales.y2.getPixelForValue(p.yield);
+
+      // Halo di titiknya, bukan titik yang membesar: ukurannya tetap sama
+      // dengan titik lain jadi nilainya tidak terbaca berubah.
+      ctx.beginPath();
+      ctx.arc(x, y, 8, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(194,37,92,0.16)';   // = KPI_COLORS.yield
+      ctx.fill();
+
+      const title = 'Yield ' + p.yield.toFixed(2) + '%';
+      const sub = fmtNum(p.hasil) + ' / ' + fmtNum(p.bahan) + ' kg';
+      ctx.font = '700 11px ' + FONT;
+      const wTitle = ctx.measureText(title).width;
+      ctx.font = '600 10px ' + MONO;
+      const wSub = ctx.measureText(sub).width;
+
+      const padX = 8, boxW = Math.max(wTitle, wSub) + padX * 2, boxH = 32;
+      // Muncul di kanan-atas titik, membalik ke kiri kalau mepet tepi kanan.
+      let bx = x + 12;
+      if (bx + boxW > chartArea.right) bx = x - 12 - boxW;
+      let by = y - boxH - 10;
+      if (by < chartArea.top) by = y + 12;
+
+      ctx.fillStyle = '#fff';
+      ctx.strokeStyle = 'rgba(26,29,46,0.12)';
+      ctx.lineWidth = 1;
+      roundRectPath(ctx, bx, by, boxW, boxH, 6);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#1a1d2e';
+      ctx.font = '700 11px ' + FONT;
+      ctx.fillText(title, bx + padX, by + 11);
+      ctx.fillStyle = '#6b7094';
+      ctx.font = '600 10px ' + MONO;
+      ctx.fillText(sub, bx + padX, by + 24);
+      ctx.restore();
+    },
+  };
+
+  function kpiChartConfig(points, sc) {
+    const bar = (label, key, color) => ({
+      type: 'bar',
+      label,
+      yAxisID: 'y',
+      order: 1,
+      data: points.map(p => p[key]),
+      backgroundColor: color,
+      borderRadius: 4,
+      borderSkipped: false,
+      // Batangnya dilebarkan: celah dalam sepasang tinggal cukup untuk
+      // memisahkan warnanya, dan celah antar periode secukupnya supaya kedua
+      // batang masih terbaca sebagai satu kelompok.
+      barPercentage: 0.9,
+      categoryPercentage: 0.84,
+    });
+
+    return {
+      type: 'bar',
+      data: {
+        labels: points.map(p => p.label),
+        datasets: [
+          bar('Bahan', 'bahan', KPI_COLORS.bahan),
+          bar('Hasil', 'hasil', KPI_COLORS.hasil),
+          {
+            // order lebih besar digambar belakangan → garis yield berada di
+            // atas batang, bukan tertimbun di belakangnya.
+            type: 'line',
+            label: 'Yield',
+            yAxisID: 'y2',
+            order: 3,
+            data: points.map(p => p.yield),
+            borderColor: KPI_COLORS.yield,
+            borderWidth: 1.5,
+            tension: 0.3,
+            spanGaps: true,
+            // 4px radius = penanda 8px, batas bawah ukuran yang masih terbaca
+            // dan bisa disentuh; di bawah itu titiknya mulai hilang di layar
+            // ponsel.
+            pointRadius: 4,
+            pointHoverRadius: 4,
+            pointBackgroundColor: KPI_COLORS.yield,
+            // Cincin warna permukaan supaya dua titik berdekatan tidak menyatu.
+            pointBorderColor: '#fff',
+            pointBorderWidth: 1.5,
+          },
+        ],
+      },
+      plugins: [kpiBarLabelPlugin, kpiCrosshairPlugin],
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 450, easing: 'easeInOutQuart' },
+        interaction: { mode: 'index', intersect: false },
+        // Strip di atas plot untuk label nilai yang tegak itu — sama seperti
+        // TOTAL_LABEL_PAD pada chart bahan per departemen.
+        layout: { padding: { top: 34, right: 2 } },
+        onHover: (_e, els, chart) => {
+          if (_kpiPinned) return;
+          const i = els.length ? els[0].index : -1;
+          if (i !== _kpiActive) { _kpiActive = i; chart.draw(); }
+        },
+        // Di ponsel tidak ada hover, jadi tap mengunci periodenya; tap lagi
+        // melepas. Pola yang sama dipakai grafik Trafic Bahan.
+        onClick: (_e, els, chart) => {
+          const i = els.length ? els[0].index : -1;
+          if (i < 0 || (_kpiPinned && _kpiActive === i)) {
+            _kpiPinned = false;
+            _kpiActive = i < 0 ? -1 : i;
+          } else {
+            _kpiPinned = true;
+            _kpiActive = i;
+          }
+          chart.draw();
+        },
+        plugins: {
+          legend: { display: false },   // legend-nya HTML, di atas kanvas
+          tooltip: { enabled: false },
+        },
+        scales: {
+          // Ketiga sumbu diberi garis; nilainya --border ditulis langsung
+          // karena kanvas tidak bisa membaca var(--…).
+          x: {
+            grid: { display: false },
+            border: { display: true, color: AXIS_LINE, width: 1 },
+            ticks: {
+              font: { family: MONO, size: 9, weight: 700 },
+              color: '#6b7094',
+              // Dibiarkan memiring sendiri saat tanggalnya tidak muat mendatar
+              // — perilaku bawaan Chart.js, dan itu pula yang dipakai chart
+              // bahan per departemen. autoSkip mati supaya ketujuh tanggalnya
+              // tetap tertulis, tidak ada yang dilewati.
+              maxRotation: 50,
+              autoSkip: false,
+            },
+          },
+          y: {
+            position: 'left',
+            beginAtZero: true,
+            max: sc.y1max,
+            grid: { color: 'rgba(0,0,0,0.04)', lineWidth: 0.5 },
+            border: { display: true, color: AXIS_LINE, width: 1 },
+            ticks: {
+              font: { family: MONO, size: 9 },
+              color: '#6b7094',
+              maxTicksLimit: 5,
+              callback: v => fmtNum(v),
+            },
+          },
+          y2: {
+            position: 'right',
+            min: sc.y2min,
+            max: sc.y2max,
+            grid: { display: false },
+            border: { display: true, color: AXIS_LINE, width: 1 },
+            ticks: {
+              font: { family: MONO, size: 9 },
+              color: '#6b7094',
+              maxTicksLimit: 4,
+              callback: v => v.toFixed(1) + '%',
+            },
+          },
+        },
+      },
+    };
   }
 
   // ═══════════════════════════════════════
@@ -1354,6 +1739,7 @@ const CutUpPage = (() => {
   function openRangePicker(s, onChange) {
     const dates = cuAllDates();
     if (!dates.length) return;
+    const MAX = s.win || 0;   // 0 = tanpa batas
 
     const availSet = new Set(dates);
     const allMonths = [...new Set(dates.map(d => d.slice(0, 7)))];
@@ -1376,7 +1762,7 @@ const CutUpPage = (() => {
     function renderAll() {
       const hint = clickPhase === 0 ? 'Pilih tanggal mulai' : 'Pilih tanggal akhir';
       popup.innerHTML = `
-        <div class="range-picker-header"><span class="range-picker-title">${hint}</span><button class="range-picker-close" id="rpClose">×</button></div>
+        <div class="range-picker-header"><span class="range-picker-title">${hint}${MAX ? ` <span class="range-picker-hint">(maks ${MAX} data)</span>` : ''}</span><button class="range-picker-close" id="rpClose">×</button></div>
         <div class="range-daily-summary">
           <div class="range-daily-summary-field ${clickPhase === 0 ? 'is-active' : ''}"><div class="range-daily-summary-label">Dari</div><div class="range-daily-summary-val">${fmtDateFull(fromDate)}</div></div>
           <div class="range-daily-summary-arrow">→</div>
@@ -1451,12 +1837,24 @@ const CutUpPage = (() => {
         const isFuture = dateStr > todayStr;
         const inRange = from && to && dateStr >= from && dateStr <= to;
         const isEndpoint = dateStr === fromDate || dateStr === toDate;
+
+        // Section berjendela tetap membatasi pilihan sebanyak jendelanya:
+        // sesudah tanggal mulai dipilih, tanggal yang membuat rentangnya
+        // melebihi batas dimatikan — sama seperti picker harian di Overview.
+        let tooFar = false;
+        if (MAX && !isFuture && clickPhase === 1 && fromDate) {
+          const lo = fromDate < dateStr ? fromDate : dateStr;
+          const hi = fromDate < dateStr ? dateStr : fromDate;
+          if (dates.filter(x => x >= lo && x <= hi).length > MAX) tooFar = true;
+        }
+
         const cell = document.createElement('div');
-        cell.className = 'range-cal-cell' + (!isFuture ? ' available' : '') +
-          (!hasData && !isFuture ? ' no-data' : '') +
-          (inRange ? ' in-range' : '') + (isEndpoint ? ' is-endpoint' : '');
+        cell.className = 'range-cal-cell' + (!isFuture && !tooFar ? ' available' : '') +
+          (!hasData && !isFuture && !tooFar ? ' no-data' : '') +
+          (inRange ? ' in-range' : '') + (isEndpoint ? ' is-endpoint' : '') +
+          (tooFar && !isFuture ? ' too-far' : '');
         cell.innerHTML = '<span>' + d + '</span>';
-        if (!isFuture) {
+        if (!isFuture && !tooFar) {
           cell.addEventListener('click', () => {
             if (clickPhase === 0) { fromDate = dateStr; toDate = null; clickPhase = 1; }
             else {

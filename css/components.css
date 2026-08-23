@@ -3518,14 +3518,56 @@
   padding: 0 20px 18px;
 }
 
-/* ── KPI row ── */
-/* Kartu memakai .kpi-card bersama halaman Overview; di sini hanya padding
-   horizontal bawaan .kpi-row yang dinetralkan, karena .cu-body sudah
-   menyediakannya. */
-.cu-kpi-row {
-  padding: 0;
-  margin-bottom: 14px;
+/* ── Chart KPI ── */
+.cu-kpi-wrap {
+  position: relative;
+  height: 260px;
 }
+
+.cu-kpi-wrap canvas { display: block; }
+
+/* Di bawah chart, rata tengah: pembacanya melihat grafiknya dulu, keterangan
+   warnanya baru dicari saat perlu. */
+.cu-kpi-legend {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  padding: 10px 0 0;
+  font-size: 11px;
+  color: var(--text-mid);
+}
+
+.cu-leg-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Kunci legend meniru bentuk marknya: kotak untuk batang, bulat untuk titik
+   yield — jadi identitasnya tidak bersandar pada warna saja. */
+.cu-leg-key i {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.cu-leg-key i.dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--surface);
+}
+
+.cu-kpi-note {
+  padding-top: 8px;
+  font-size: 10.5px;
+  color: var(--text-muted);
+}
+
+.cu-kpi-note:empty { display: none; }
 
 /* ── Donut + tabel ── */
 /* Tanpa garis tepi dan tanpa latar sendiri: .section di luarnya sudah punya
@@ -3769,6 +3811,12 @@
    seperti di Overview. */
 @media (max-width: 760px) {
   .cu-body { padding: 0 14px 16px; }
+
+  /* Lebih pendek di ponsel, tapi tidak terlalu: batang butuh ruang vertikal
+     untuk label tegaknya, dan titik yield harus tetap di atas batang. Tanggal
+     yang memiring memakan ~20px lagi di bawah, jadi tingginya ditambah
+     sebanyak itu — kalau tidak, yang tergerus justru plotnya. */
+  .cu-kpi-wrap { height: 250px; }
 
   .cu-card-head,
   .cu-donut-legend:not(:empty),
