@@ -44,12 +44,16 @@
 }
 
 /* ── Date navigator ── */
+/* Huruf kontrol baris atas — navigasi tanggal, tombol rentang, toggle BRD/KG —
+   dipatok satu: font body 11.5px/600 dengan padding 5px 10px, sama dengan
+   trigger dropdown. Sebelumnya masing-masing memakai mono di ukuran sendiri,
+   dan berjajar di satu baris ketiganya terbaca sebagai kelas yang berbeda. */
 .date-nav {
   display: flex;
   align-items: center;
   gap: 4px;
-  font-family: var(--font-mono);
-  font-size: 12px;
+  font-family: var(--font-body);
+  font-size: 11.5px;
   font-weight: 600;
   color: var(--text-mid);
   user-select: none;
@@ -83,12 +87,11 @@
 }
 
 .date-nav-label {
-  padding: 0 6px;
   min-width: 110px;
   text-align: center;
   cursor: pointer;
   border-radius: var(--radius-sm);
-  padding: 4px 10px;
+  padding: 5px 10px;
   transition: background var(--transition);
 }
 
@@ -96,8 +99,10 @@
   gap: 1px;
 }
 
+/* Di dalam kalender ruangnya sempit; yang dipangkas sisi kirinya saja supaya
+   tingginya tetap sama dengan navigasi tanggal di luar. */
 #calMonthNav .date-nav-label {
-  padding: 4px 4px;
+  padding: 5px 4px;
 }
 
 .date-nav-label:hover {
@@ -455,16 +460,17 @@
 }
 
 .toggle-btn {
-  padding: 5px 14px;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 700;
+  padding: 5px 10px;
+  font-family: var(--font-body);
+  font-size: 11.5px;
+  font-weight: 600;
   border: none;
   background: transparent;
-  color: var(--text-muted);
+  /* Setara warna teks kontrol di sebelahnya. Abu terang membuat toggle ini
+     terbaca separuh mati padahal kedua sisinya sama-sama bisa dipilih. */
+  color: var(--text-mid);
   cursor: pointer;
   transition: all var(--transition);
-  letter-spacing: -0.01em;
 }
 
 .toggle-btn:not(:last-child) {
@@ -478,7 +484,7 @@
 
 .toggle-btn:hover:not(.active) {
   background: var(--bg);
-  color: var(--text-mid);
+  color: var(--text);
 }
 
 /* ── Dropdown select (native, fallback) ── */
@@ -1473,9 +1479,10 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   color: var(--text-mid);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  padding: 4px 10px;
+  font-family: var(--font-body);
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 5px 10px;
   cursor: pointer;
   transition: all var(--transition);
 }
@@ -3547,9 +3554,16 @@
 
 /* Kunci legend meniru bentuk marknya: kotak untuk batang, bulat untuk titik
    yield — jadi identitasnya tidak bersandar pada warna saja. */
+/* Kunci Bahan dan Hasil mengikuti batangnya: isi pucat, tepi warna penuh.
+   Tepinya selalu ada tapi bening; yang perlu saja mengisi border-color lewat
+   style inline, jadi kunci Yield tetap tampil sebagai bidang polos. Tanpa
+   tepi bening yang selalu ada, kunci Bahan dan Hasil jadi 1px lebih besar dari
+   yang lain. */
 .cu-leg-key i {
-  width: 10px;
-  height: 10px;
+  box-sizing: border-box;
+  width: 11px;
+  height: 11px;
+  border: 1px solid transparent;
   border-radius: 2px;
   flex-shrink: 0;
 }

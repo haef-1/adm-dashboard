@@ -17,17 +17,21 @@ const CutUpPage = (() => {
 
   // ── Chart KPI ──
   const KPI_BARS = 7;   // periode terbanyak yang digambar
-  // Lolos validator palet: pita lightness, chroma, pemisahan CVD (ΔE 24,7
-  // deutan), dan penglihatan normal (ΔE 30,8). Kontras kuning terhadap latar
-  // 2,14:1 — di bawah 3:1, ditebus label nilai yang tercetak di tiap batang.
+  // Warna identitas tiap seri, bukan warna isinya. Bahan dan Hasil memakainya
+  // di tepi batang saja; isinya versi muda yang dibuat tint() — lihat
+  // FILL_TINT. Lolos validator palet: pita lightness, chroma, pemisahan CVD
+  // (ΔE 24,7 deutan), dan penglihatan normal (ΔE 30,8).
   //
-  // Yield tidak bisa tetap oranye begitu Hasil jadi kuning: pasangan itu cuma
-  // terpisah ΔE 5,9 di mata deutan dan 14,7 di mata normal — praktis satu
-  // warna. Crimson dipilih karena terpisah jauh dari keduanya dan bukan merah
-  // status, yang warnanya disimpan untuk penanda bahaya.
-  const KPI_COLORS = { bahan: '#3b7ddd', hasil: '#e0a500', yield: '#c2255c' };
-  // Batas bawah posisi titik yield terendah, sebagai pecahan tinggi plot.
-  const DOT_FLOOR = 0.45;
+  // Yield biru tosca. Terhadap kuning Hasil jaraknya jauh di mata mana pun.
+  // Yang perlu dijaga justru terhadap biru Bahan: di mata deutan
+  // keduanya sama-sama luruh ke biru-lavender (#9d9dda lawan #6f6fdd), jadi
+  // yang memisahkan tinggal terang-gelapnya — dan itu memang lebar. Bentuknya
+  // menambah satu lapis lagi: garis bertitik lawan batang.
+  //
+  // Kontrasnya terhadap latar 2,37:1, di bawah 3:1. Ditebus tebal garisnya
+  // yang 3px dan titik 8px — dua-duanya jauh di atas ukuran di mana ambang itu
+  // benar-benar menggigit.
+  const KPI_COLORS = { bahan: '#3b7ddd', hasil: '#e0a500', yield: '#00b8d9' };
   const AXIS_LINE = '#e2e5ef';   // = --border
 
   // Ukuran kanvas donut. H_BASE dan R hasil hitungan lebar adalah titik
@@ -91,6 +95,10 @@ const CutUpPage = (() => {
   let cuDetailOpen = false;   // tabel menggantikan donut
   let cuCanvas = null, cuRo = null;
   let _kpiChart = null, _kpiActive = -1, _kpiPinned = false;
+  // Skala sumbu kiri yang sedang berlaku. Dibaca afterBuildTicks, yang dipanggil
+  // Chart.js dari dalam — tidak bisa lewat closure config, karena jalur update
+  // memakai ulang config lama dan closure-nya masih menunjuk skala yang usang.
+  let _kpiScale = null;
   let _rangeDocListener = null, _rangeScrollListener = null;
   let _datesCache = null, _datesRawLen = -1;
   let _aggCache = new Map(), _aggRawLen = -1;
@@ -190,8 +198,15 @@ const CutUpPage = (() => {
   // Yield selalu berbasis KG apapun toggle-nya: pada CUT UP kolom BRD di sisi
   // HASIL berisi hitungan potongan, bukan ekor, jadi rasionya tidak sebanding
   // dengan BRD di sisi BAHAN.
+  //
+  // Dipotong ke bawah pada 2 desimal — dipotong, bukan dibulatkan — dan itu
+  // pula angka yang dipakai menggambar titiknya. Jadi yang tertulis sama dengan
+  // yang digambar: dua periode berlabel sama pasti duduk di tinggi yang sama.
+  // Kalau nilainya dibiarkan presisi penuh, selisih 0,01pp saja sudah berjarak
+  // ±3px pada jendela sumbu kanan yang sesempit sekarang.
   function cuYield(agg) {
-    return agg.bahanKg ? (agg.hasilKg / agg.bahanKg) * 100 : null;
+    if (!agg.bahanKg) return null;
+    return Math.floor((agg.hasilKg / agg.bahanKg) * 10000) / 100;
   }
 
   function sortedItems(agg, unit) {
@@ -235,6 +250,21 @@ const CutUpPage = (() => {
     const b = Math.round((n & 255) * (1 - k));
     return 'rgb(' + r + ',' + g + ',' + b + ')';
   }
+
+  // Kebalikan darken(): mencampur warna ke arah putih. Isi batang Bahan dan
+  // Hasil dibuat dari sini, bukan dari warna terpisah — jadi warna serinya
+  // tetap satu sumber, dan isi pucat itu selalu versi muda dari warna yang
+  // sama dengan tepinya.
+  function tint(hex, k) {
+    const n = parseInt(hex.slice(1), 16);
+    const m = v => Math.round(v + (255 - v) * k);
+    return 'rgb(' + m((n >> 16) & 255) + ',' + m((n >> 8) & 255) + ',' + m(n & 255) + ')';
+  }
+
+  // Seberapa muda isi batang dibanding warna serinya. Pada 0,5 tinta gelap di
+  // dalam batang dapat kontras 8,8:1 (Bahan) dan 11,3:1 (Hasil) — jauh di atas
+  // ambang 4,5:1, jadi angka 9px pun aman terbaca.
+  const FILL_TINT = 0.5;
 
   function fmtNum(v) { return Math.round(v).toLocaleString('id-ID'); }
   function fmtPct(v, dp) { return v.toFixed(dp === undefined ? 1 : dp) + '%'; }
@@ -339,8 +369,8 @@ const CutUpPage = (() => {
                sumbu tidak ikut di sini — digambar di ujung atas garis
                sumbunya masing-masing. -->
           <div class="cu-kpi-legend">
-            <span class="cu-leg-key"><i style="background:${KPI_COLORS.bahan}"></i>Bahan</span>
-            <span class="cu-leg-key"><i style="background:${KPI_COLORS.hasil}"></i>Hasil</span>
+            <span class="cu-leg-key"><i style="background:${tint(KPI_COLORS.bahan, FILL_TINT)};border-color:${KPI_COLORS.bahan}"></i>Bahan</span>
+            <span class="cu-leg-key"><i style="background:${tint(KPI_COLORS.hasil, FILL_TINT)};border-color:${KPI_COLORS.hasil}"></i>Hasil</span>
             <span class="cu-leg-key"><i class="dot" style="background:${KPI_COLORS.yield}"></i>Yield</span>
           </div>
           <div class="cu-kpi-note" id="cuKpiNote"></div>
@@ -535,38 +565,91 @@ const CutUpPage = (() => {
     return (NICE_STEPS.find(st => f <= st + 1e-9) || 10) * mag;
   }
 
-  // Batas kedua sumbu. Sumbu kanan mengikuti aturan yang diminta apa adanya
-  // — yield terendah −1, tertinggi +0,5 — dan yang menyesuaikan justru sumbu
-  // kirinya: batas atasnya dinaikkan sampai puncak batang tertinggi berada di
-  // bawah titik yield terendah. Jadi "titik selalu di atas batang" berlaku
-  // tanpa mengutak-atik skala persennya.
+  // Jarak antar label sumbu kiri. Dilepas ke Chart.js, sumbunya cuma terbagi
+  // empat — pada batas 80.000 itu berarti kelipatan 20.000 saja, terlalu jarang
+  // untuk menaksir tinggi batang. Yang dicari: pembagi y1max yang jatuh di
+  // angka bulat dan membelah sumbu jadi 6–12 bagian. Batas atasnya tidak
+  // digeser, jadi tinggi batang relatif terhadap titik yield tidak berubah.
+  const TICK_UNITS = [1, 1.5, 2, 2.5, 3, 4, 5];
+
+  // 190px plot dibagi 12 masih menyisakan ~15px per label pada font 9px, tapi
+  // yang enak dibaca ada di sekitar 9 — itu yang dijadikan sasaran, dan yang
+  // paling dekat ke situ yang dipakai.
+  const TICK_TARGET = 9;
+
+  // Memilih langkah tick sumbu kiri: pembagi y1max yang jatuh di angka bulat
+  // dan membelah sumbu jadi sebanyak mungkin bagian mendekati TICK_TARGET.
+  function niceDiv(max) {
+    let best = null;
+    for (let n = 6; n <= 12; n++) {
+      const step = max / n;
+      const mag = Math.pow(10, Math.floor(Math.log10(step) + 1e-9));
+      const f = step / mag;
+      if (!TICK_UNITS.some(u => Math.abs(f - u) < 1e-9)) continue;
+      const d = Math.abs(n - TICK_TARGET);
+      if (!best || d < best.d) best = { d, n, step };
+    }
+    // Tidak ada pembagi bulat — biar Chart.js yang memilih seperti sebelumnya.
+    return best ? { step: best.step, count: best.n + 1 } : { step: undefined, count: 5 };
+  }
+
+  // Batas kedua sumbu. Sumbu kanan dipatok sesempit yang diminta — yield
+  // terendah −0,5 sampai tertinggi +0,1 — supaya selisih antar periode yang
+  // cuma sepersekian poin tetap terbaca sebagai lekukan garis.
+  //
+  // Jendela sesempit itu menaruh titik yield di mana saja sepanjang tinggi plot,
+  // jadi aturan lama "titik selalu di atas batang" tidak bisa lagi dipenuhi
+  // tanpa memipihkan batang jadi sisa. Sumbu kiri karena itu kembali ke headroom
+  // biasa: batangnya memakai tinggi plot sebagaimana adanya, dan garis yield
+  // boleh melintasinya.
   function kpiScales(points) {
     const bars = points.reduce((m, p) => Math.max(m, p.bahan, p.hasil), 0);
     const ys = points.map(p => p.yield).filter(v => v !== null);
+    const y1max = niceCeil(bars * 1.15) || 1;
 
-    if (!ys.length) return { y1max: niceCeil(bars * 1.25) || 1, y2min: 0, y2max: 100 };
+    // Tanpa satu pun yield, sumbu kanan cuma jadi bingkai kosong: 0–100 dengan
+    // langkah 20. Kelipatan 0,1 di rentang selebar itu berarti seribu tick.
+    if (!ys.length) return y1Ticks({ y1max, y2min: 0, y2max: 100, y2step: 20, y2count: 6 });
 
     const lo = Math.min(...ys), hi = Math.max(...ys);
-    const y2max = Math.min(100, hi + 0.1);
-    let y2min = Math.max(0, lo - 1);
+    // Kedua batas dijatuhkan ke kelipatan Y2_STEP terdekat ke arah luar, jadi
+    // −0,5 dan +0,1 itu marjin minimum, bukan angka mati. Tanpa ini batasnya
+    // jatuh di pecahan seperti 64,73 dan seluruh tangga label ikut miring.
+    // Jepit 0..100 sekadar penjaga: yield di luar itu tidak mungkin, dan pada
+    // data CUT UP (65–75%) jepitannya memang tidak pernah kena.
+    const y2min = Math.max(0, snapDown(lo - 0.5));
+    const y2max = Math.min(100, snapUp(hi + 0.1));
+    return y1Ticks({
+      y1max,
+      y2min,
+      y2max,
+      y2step: Y2_STEP,
+      // Jumlah label kalau setiap kelipatan ditulis. Dipakai sebagai
+      // maxTicksLimit; kalau rentang yieldnya lebar sehingga selabel 0,1 tidak
+      // muat, autoSkip Chart.js yang melewati sebagian — kelipatannya tetap
+      // jatuh di 0,1 (jadi 0,2 atau 0,3), bukan bergeser ke angka pecahan.
+      y2count: Math.round((y2max - y2min) / Y2_STEP) + 1,
+    });
+  }
 
-    // −1 di bawah yield terendah cukup selama sebaran antar periode sempit,
-    // dan memang itu keadaan normalnya. Tapi kalau sebarannya lebar, jendela
-    // sesempit itu menaruh titik terendah nyaris di dasar plot — dan tidak ada
-    // batas y1 yang bisa menaruh batang di bawahnya tanpa memipihkannya jadi
-    // sisa. Jadi jendelanya dilebarkan ke bawah secukupnya sampai titik
-    // terendah duduk di DOT_FLOOR tinggi plot. Pada sebaran ≤1,2pp rumus −1
-    // sudah memenuhi syarat ini, jadi angkanya tidak berubah.
-    const need = (DOT_FLOOR / (1 - DOT_FLOOR)) * (y2max - lo);
-    if (lo - y2min < need) y2min = Math.max(0, lo - need);
+  // Kelipatan label sumbu kanan, dalam poin persen.
+  const Y2_STEP = 0.1;
 
-    // Posisi titik terendah sebagai pecahan tinggi plot, lalu batas atas
-    // sumbu kiri dipilih supaya puncak batang tertinggi berada tepat di
-    // bawahnya. Jaraknya cukup 0,02 (≈4px pada plot 200px) — sekadar tidak
-    // bersentuhan; lebih dari itu hanya menyisakan pita kosong di tengah.
-    const lowest = (lo - y2min) / Math.max(0.001, y2max - y2min);
-    const room = Math.max(0.15, lowest - 0.02);
-    return { y1max: niceCeil(Math.max(bars / room, bars * 1.15)) || 1, y2min, y2max };
+  // Pembulatan ke kelipatan Y2_STEP, ke bawah untuk batas bawah dan ke atas
+  // untuk batas atas. Hasilnya dinormalkan ke tiga desimal supaya galat pecahan
+  // biner (0,1 tidak bulat di basis dua) tidak ikut terbawa ke nilai tick.
+  const snapDown = v => Math.round(Math.floor(v / Y2_STEP + 1e-9) * Y2_STEP * 1e3) / 1e3;
+  const snapUp = v => Math.round(Math.ceil(v / Y2_STEP - 1e-9) * Y2_STEP * 1e3) / 1e3;
+
+  // Langkah sumbu kiri selalu diturunkan dari y1max yang sudah jadi, jadi kedua
+  // jalan keluar kpiScales() memakai aturan yang sama. Sumbunya berangkat dari
+  // nol: semua batang menunjuk ke atas.
+  function y1Ticks(sc) {
+    const d = niceDiv(sc.y1max);
+    sc.y1min = 0;
+    sc.y1step = d.step;
+    sc.y1count = d.count;
+    return sc;
   }
 
   function renderKpiChart() {
@@ -589,6 +672,7 @@ const CutUpPage = (() => {
     if (!hasData) { destroyKpiChart(); return; }
 
     const sc = kpiScales(points);
+    _kpiScale = sc;
     const cfg = kpiChartConfig(points, sc);
 
     // Chart.js hanya dibuat sekali; pembaruan berikutnya menimpa datanya
@@ -597,8 +681,13 @@ const CutUpPage = (() => {
       _kpiChart.data.labels = cfg.data.labels;
       cfg.data.datasets.forEach((ds, i) => { _kpiChart.data.datasets[i].data = ds.data; });
       _kpiChart.options.scales.y.max = sc.y1max;
+      _kpiChart.options.scales.y.min = sc.y1min;
+      _kpiChart.options.scales.y.ticks.stepSize = sc.y1step;
+      _kpiChart.options.scales.y.ticks.maxTicksLimit = sc.y1count;
       _kpiChart.options.scales.y2.min = sc.y2min;
       _kpiChart.options.scales.y2.max = sc.y2max;
+      _kpiChart.options.scales.y2.ticks.stepSize = sc.y2step;
+      _kpiChart.options.scales.y2.ticks.maxTicksLimit = sc.y2count;
       _kpiChart.$cuPoints = points;
       _kpiChart.update();
       return;
@@ -617,33 +706,18 @@ const CutUpPage = (() => {
 
   function destroyKpiChart() {
     if (_kpiChart) { _kpiChart.destroy(); _kpiChart = null; }
+    _kpiScale = null;
     _kpiActive = -1;
     _kpiPinned = false;
   }
 
-  // Tinta label di dalam batang mengikuti terang-gelap warna batangnya, tidak
-  // dipatok putih: angka putih di atas batang kuning nyaris tak terbaca.
-  function inkOn(hex) {
-    const n = parseInt(hex.slice(1), 16);
-    const lin = v => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4); };
-    const lum = 0.2126 * lin((n >> 16) & 255) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255);
-    return lum > 0.4 ? '#1a1d2e' : '#fff';
-  }
-
-  function roundRectPath(ctx, x, y, w, h, r) {
-    ctx.beginPath();
-    ctx.moveTo(x + r, y);
-    ctx.arcTo(x + w, y, x + w, y + h, r);
-    ctx.arcTo(x + w, y + h, x, y + h, r);
-    ctx.arcTo(x, y + h, x, y, r);
-    ctx.arcTo(x, y, x + w, y, r);
-    ctx.closePath();
-  }
-
   // Nilai tiap batang, ditulis tegak di atas batangnya. Tegak karena dengan 7
-  // periode × 2 batang, angka mendatar pasti bertabrakan di layar ponsel.
-  // Warnanya tinta redup, bukan warna serinya — identitas seri sudah dibawa
-  // batangnya sendiri.
+  // periode × 3 batang, angka mendatar pasti bertabrakan di layar ponsel.
+  //
+  // Tintanya gelap, bukan warna serinya — identitas seri sudah dibawa batangnya
+  // sendiri, dan isi batang yang pucat itu memang disiapkan untuk menampung
+  // tinta segelap ini. Satu-satunya yang tetap redup: angka batang yang terlalu
+  // pendek, yang terpaksa melayang di luar batangnya (lihat di bawah).
   const kpiBarLabelPlugin = {
     id: 'cuKpiBarLabels',
     afterDatasetsDraw(chart) {
@@ -674,7 +748,11 @@ const CutUpPage = (() => {
             // Muat di dalam batang: menempel di bawah ujung atasnya. textAlign
             // right membuat teks memanjang ke bawah setelah diputar.
             ctx.save();
-            ctx.fillStyle = inkOn(chart.data.datasets[di].backgroundColor);
+            // Tinta gelap untuk kedua seri: isi batangnya sudah dipucatkan
+            // justru supaya angka ini bisa hitam. Dipatok sama untuk keduanya
+            // walau kuning Hasil lebih terang dari biru Bahan — pasangan itu
+            // dibaca sekaligus, jadi tintanya tidak boleh berbeda.
+            ctx.fillStyle = '#1a1d2e';
             ctx.textAlign = 'right';
             ctx.translate(bar.x, bar.y + 7);
             ctx.rotate(-Math.PI / 2);
@@ -696,13 +774,14 @@ const CutUpPage = (() => {
           ctx.restore();
         });
       });
+
       ctx.restore();
     },
   };
 
-  // Garis bidik + popup kecil di titik yield periode aktif. Tooltip bawaan
-  // Chart.js dimatikan supaya isinya bisa dipilih sendiri — sama seperti
-  // grafik Trafic Bahan di Overview.
+  // Garis bidik + nilai yield periode aktif. Tooltip bawaan Chart.js dimatikan
+  // supaya isinya bisa dipilih sendiri — sama seperti grafik Trafic Bahan di
+  // Overview.
   const kpiCrosshairPlugin = {
     id: 'cuKpiCrosshair',
     afterDatasetsDraw(chart) {
@@ -729,38 +808,33 @@ const CutUpPage = (() => {
       // dengan titik lain jadi nilainya tidak terbaca berubah.
       ctx.beginPath();
       ctx.arc(x, y, 8, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(194,37,92,0.16)';   // = KPI_COLORS.yield
+      ctx.fillStyle = 'rgba(0,184,217,0.22)';   // = KPI_COLORS.yield
       ctx.fill();
 
-      const title = 'Yield ' + p.yield.toFixed(2) + '%';
-      const sub = fmtNum(p.hasil) + ' / ' + fmtNum(p.bahan) + ' kg';
+      // Nilainya saja, tanpa kotak: angkanya melayang di atas titik. Warnanya
+      // warna seri yield supaya jelas angka milik garis yang mana.
+      // Nilainya sudah dipotong 2 desimal di cuYield(), jadi toFixed(2) di sini
+      // hanya menjaga nol di belakang — bukan pembulatan kedua.
+      const text = p.yield.toFixed(2) + '%';
       ctx.font = '700 11px ' + FONT;
-      const wTitle = ctx.measureText(title).width;
-      ctx.font = '600 10px ' + MONO;
-      const wSub = ctx.measureText(sub).width;
+      const w = ctx.measureText(text).width;
 
-      const padX = 8, boxW = Math.max(wTitle, wSub) + padX * 2, boxH = 32;
-      // Muncul di kanan-atas titik, membalik ke kiri kalau mepet tepi kanan.
-      let bx = x + 12;
-      if (bx + boxW > chartArea.right) bx = x - 12 - boxW;
-      let by = y - boxH - 10;
-      if (by < chartArea.top) by = y + 12;
+      // Di atas titik, membalik ke bawah kalau mepet tepi atas; sisi kiri-kanan
+      // dijepit ke dalam area plot supaya angkanya tidak terpotong di ujung.
+      let tx = Math.min(Math.max(x, chartArea.left + w / 2), chartArea.right - w / 2);
+      let ty = y - 16;
+      if (ty - 6 < chartArea.top) ty = y + 16;
 
-      ctx.fillStyle = '#fff';
-      ctx.strokeStyle = 'rgba(26,29,46,0.12)';
-      ctx.lineWidth = 1;
-      roundRectPath(ctx, bx, by, boxW, boxH, 6);
-      ctx.fill();
-      ctx.stroke();
-
-      ctx.textAlign = 'left';
+      ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillStyle = '#1a1d2e';
-      ctx.font = '700 11px ' + FONT;
-      ctx.fillText(title, bx + padX, by + 11);
-      ctx.fillStyle = '#6b7094';
-      ctx.font = '600 10px ' + MONO;
-      ctx.fillText(sub, bx + padX, by + 24);
+      // Garis luar putih tipis: tanpa kotak, angkanya bisa jatuh di atas batang,
+      // dan ini yang menjaga bentuk hurufnya tetap terbaca di sana.
+      ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+      ctx.lineWidth = 3;
+      ctx.lineJoin = 'round';
+      ctx.strokeText(text, tx, ty);
+      ctx.fillStyle = KPI_COLORS.yield;
+      ctx.fillText(text, tx, ty);
       ctx.restore();
     },
   };
@@ -772,7 +846,21 @@ const CutUpPage = (() => {
       yAxisID: 'y',
       order: 1,
       data: points.map(p => p[key]),
-      backgroundColor: color,
+      // Kedua batang berisi warna muda: yang gelap di chart ini tinggal
+      // angkanya, dan itu memang yang harus dibaca duluan. Isi sepucat itu cuma
+      // berjarak 1,9:1 (Bahan) dan 1,5:1 (Hasil) dari latar
+      // kartu — sendirian ia larut ke dalam putihnya. Tepinya karena itu
+      // memakai warna seri yang penuh: itu yang menegaskan bentuk batangnya,
+      // sekaligus menjaga identitas warnanya tetap terbaca seperti sebelumnya.
+      backgroundColor: tint(color, FILL_TINT),
+      borderColor: color,
+      borderWidth: 1,
+      // Chart.js memucatkan batang yang di-hover secara bawaan. Warna hover
+      // dipatok sama dengan warna batangnya supaya tidak ada yang berubah saat
+      // disentuh: penanda periode aktif sudah dibawa garis bidik + angka yield.
+      hoverBackgroundColor: tint(color, FILL_TINT),
+      hoverBorderColor: color,
+      hoverBorderWidth: 1,
       borderRadius: 4,
       borderSkipped: false,
       // Batangnya dilebarkan: celah dalam sepasang tinggal cukup untuk
@@ -790,15 +878,18 @@ const CutUpPage = (() => {
           bar('Bahan', 'bahan', KPI_COLORS.bahan),
           bar('Hasil', 'hasil', KPI_COLORS.hasil),
           {
-            // order lebih besar digambar belakangan → garis yield berada di
-            // atas batang, bukan tertimbun di belakangnya.
+            // Chart.js menggambar dataset dari order TERBESAR ke terkecil
+            // (_drawDatasets berjalan mundur atas larik yang sudah diurutkan
+            // menaik), jadi order terkecil yang tampil paling atas. Yield
+            // karena itu 0, di bawah kedua batang yang order-nya 1 — kalau
+            // dibalik, garisnya tertimbun batang setiap kali melintasinya.
             type: 'line',
             label: 'Yield',
             yAxisID: 'y2',
-            order: 3,
+            order: 0,
             data: points.map(p => p.yield),
             borderColor: KPI_COLORS.yield,
-            borderWidth: 1.5,
+            borderWidth: 3,
             tension: 0.3,
             spanGaps: true,
             // 4px radius = penanda 8px, batas bawah ukuran yang masih terbaca
@@ -810,6 +901,10 @@ const CutUpPage = (() => {
             // Cincin warna permukaan supaya dua titik berdekatan tidak menyatu.
             pointBorderColor: '#fff',
             pointBorderWidth: 1.5,
+            // Sama seperti batangnya: titik yang di-hover tidak berubah warna.
+            pointHoverBackgroundColor: KPI_COLORS.yield,
+            pointHoverBorderColor: '#fff',
+            pointHoverBorderWidth: 1.5,
           },
         ],
       },
@@ -863,15 +958,31 @@ const CutUpPage = (() => {
           },
           y: {
             position: 'left',
-            beginAtZero: true,
+            min: sc.y1min,
             max: sc.y1max,
-            grid: { color: 'rgba(0,0,0,0.04)', lineWidth: 0.5 },
+            // Garis nol dipertegas: itu dasar batang Bahan dan Hasil, jadi ia
+            // yang membuat tinggi tiap batang terbaca. Sisanya tetap kisi samar
+            // seperti sebelumnya.
+            grid: {
+              color: c => (c.tick && c.tick.value === 0 ? 'rgba(26,29,46,0.22)' : 'rgba(0,0,0,0.04)'),
+              lineWidth: c => (c.tick && c.tick.value === 0 ? 1 : 0.5),
+            },
             border: { display: true, color: AXIS_LINE, width: 1 },
             ticks: {
               font: { family: MONO, size: 9 },
               color: '#6b7094',
-              maxTicksLimit: 5,
-              callback: v => fmtNum(v),
+              // stepSize dan maxTicksLimit menunjuk pembagian yang sama; kalau
+              // hanya salah satunya diisi, Chart.js masih menghitung ulang
+              // jaraknya sendiri dan kembali ke kelipatan yang jarang.
+              stepSize: sc.y1step,
+              maxTicksLimit: sc.y1count,
+              // Semua label dibuat selebar label terpanjang. Fontnya monospace,
+              // jadi spasi di depan menyamakan lebarnya persis — "0" tidak lagi
+              // berdiri sendiri sebagai label satu digit di antara yang enam.
+              callback: (v, _i, ticks) => {
+                const w = ticks.reduce((m, t) => Math.max(m, fmtNum(t.value).length), 0);
+                return fmtNum(v).padStart(w);
+              },
             },
           },
           y2: {
@@ -883,7 +994,11 @@ const CutUpPage = (() => {
             ticks: {
               font: { family: MONO, size: 9 },
               color: '#6b7094',
-              maxTicksLimit: 4,
+              // Sama seperti sumbu kiri: stepSize dan maxTicksLimit menunjuk
+              // pembagian yang sama, kalau tidak Chart.js menghitung ulang
+              // jaraknya sendiri dan kembali ke kelipatan yang lebih jarang.
+              stepSize: sc.y2step,
+              maxTicksLimit: sc.y2count,
               callback: v => v.toFixed(1) + '%',
             },
           },
