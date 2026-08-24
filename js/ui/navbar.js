@@ -87,6 +87,7 @@ const Navbar = (() => {
     if (typeof KarkasTablePage !== 'undefined' && KarkasTablePage.destroy) KarkasTablePage.destroy();
     if (typeof CutUpPage !== 'undefined' && CutUpPage.destroy) CutUpPage.destroy();
     if (typeof BonelessPage !== 'undefined' && BonelessPage.destroy) BonelessPage.destroy();
+    if (typeof AyamUtuhPage !== 'undefined' && AyamUtuhPage.destroy) AyamUtuhPage.destroy();
 
     // Load page content
     const container = document.getElementById('pageContent');
@@ -108,6 +109,9 @@ const Navbar = (() => {
         break;
       case 'boneless':
         BonelessPage.render(container);
+        break;
+      case 'ayam-utuh':
+        AyamUtuhPage.render(container);
         break;
       default:
         container.innerHTML = `
