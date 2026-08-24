@@ -86,6 +86,7 @@ const Navbar = (() => {
     // Clean up previous page
     if (typeof KarkasTablePage !== 'undefined' && KarkasTablePage.destroy) KarkasTablePage.destroy();
     if (typeof CutUpPage !== 'undefined' && CutUpPage.destroy) CutUpPage.destroy();
+    if (typeof BonelessPage !== 'undefined' && BonelessPage.destroy) BonelessPage.destroy();
 
     // Load page content
     const container = document.getElementById('pageContent');
@@ -104,6 +105,9 @@ const Navbar = (() => {
         break;
       case 'cut-up':
         CutUpPage.render(container);
+        break;
+      case 'boneless':
+        BonelessPage.render(container);
         break;
       default:
         container.innerHTML = `

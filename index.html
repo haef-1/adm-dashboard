@@ -13,7 +13,7 @@
     <script defer src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <link rel="stylesheet" href="css/base.css?v=3" />
     <link rel="stylesheet" href="css/layout.css?v=3" />
-    <link rel="stylesheet" href="css/components.css?v=38" />
+    <link rel="stylesheet" href="css/components.css?v=39" />
   </head>
   <body>
     <!-- LOGIN SCREEN  -->
@@ -183,7 +183,7 @@
     <script defer src="js/engine/tta-traffic.js?v=7"></script>
 
     <!-- UI -->
-    <script defer src="js/ui/navbar.js?v=4"></script>
+    <script defer src="js/ui/navbar.js?v=5"></script>
     <script defer src="js/ui/datepicker.js?v=3"></script>
     <script defer src="js/ui/charts.js?v=3"></script>
     <script defer src="js/ui/import.js?v=3"></script>
@@ -196,7 +196,11 @@
     <script defer src="js/pages/overview-table.js?v=3"></script>
     <script defer src="js/pages/karkas.js?v=3"></script>
     <script defer src="js/pages/karkas-table.js?v=3"></script>
-    <script defer src="js/pages/cut-up.js?v=51"></script>
+    <!-- dept-page.js harus lebih dulu: kedua file di bawahnya memanggil
+         createDeptPage() saat dieksekusi. -->
+    <script defer src="js/pages/dept-page.js?v=1"></script>
+    <script defer src="js/pages/cut-up.js?v=53"></script>
+    <script defer src="js/pages/boneless.js?v=1"></script>
 
     <!-- INIT -->
     <script defer src="js/main.js?v=4"></script>

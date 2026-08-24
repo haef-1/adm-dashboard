@@ -3526,6 +3526,16 @@
 }
 
 /* ── Chart KPI ── */
+/* Judulnya memakai ukuran yang sama dengan judul kartu donut di bawah, tapi
+   tanpa .cu-card-head: chart ini tidak punya tombol di sebelahnya, dan padding
+   kirinya sudah datang dari .cu-body.
+   Jaraknya ke kanvas tipis saja: chart-nya sendiri sudah menyisakan 34px
+   padding di atas plot untuk label nilai yang tegak, jadi jarak penuh seperti
+   .cu-card-head bikin judulnya terlihat melayang jauh dari grafiknya. */
+.cu-kpi-title {
+  margin-bottom: 2px;
+}
+
 .cu-kpi-wrap {
   position: relative;
   height: 260px;
