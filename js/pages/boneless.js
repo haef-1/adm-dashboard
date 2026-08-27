@@ -27,7 +27,7 @@ const BonelessPage = createDeptPage({
   // tergantung bauran produk masing-masing sub-dept, jadi jangan dibaca
   // sebagai yield; gunanya melihat komposisi kategori seluruh Boneless.
   cards: {
-    title: 'Dept Card Perform',
+    title: 'Showcase Hasil Boneless',
     pv: 'AYAM BARU',
     // Kategori yang dibaca berpasangan, digabung jadi satu kartu. Digabung
     // waktu menghitung, bukan di tabel dept_categorized — kamusnya tetap
@@ -38,6 +38,14 @@ const BonelessPage = createDeptPage({
       'BSB': 'BB/BSB',
       'BL':  'BL/BSL',
       'BSL': 'BL/BSL',
+    },
+    // Singkatan label kartu, dipetakan per KATA dan cuma memengaruhi tulisan di
+    // bilah kartu — nama kategori di kamus, di perhitungan, dan di aria-label
+    // tetap utuh. "CINCANG CAMPUR" ditulis tegak di bilah selebar ~27px pasti
+    // terpotong; "C. CAMPUR" muat.
+    abbr: {
+      'CINCANG': 'C.',
+      'TULANG':  'TL.',
     },
     defaultDept: 'BONELESS BONGKAR',
     deptOptions: [

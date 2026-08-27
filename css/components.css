@@ -3893,25 +3893,57 @@
    jadi yang berikutnya duduk di atas yang sebelumnya — persis seperti
    kartu yang dikipaskan di tangan.
 
-   Lebar kartunya TIDAK dipatok — diturunkan dari lebar section. Semua
-   kartu flex:1 1 0, jadi kipasnya selalu mengisi 100% kolomnya:
+   Lebar kartunya TIDAK dipatok — diturunkan dari lebar section. Basis 0
+   dengan flex-grow s_j, jadi seluruh ruang bebasnya terbagi habis dan
+   kipasnya selalu mengisi 100% kolomnya berapa pun s_j-nya:
 
-     diam   n·x − (n−1)·ov = W   ->  x = (W + (n−1)·ov) / n
-     sorot  n·x − (n−2)·ov = W   ->  x = (W + (n−2)·ov) / n
-     bilah  a = x − ov           ->  a = (W − ov) / n
+     ruang bebas  F   = W + (n−1)·ov     (margin negatif ikut jadi ruang)
+     lebar kartu  x_j = F · s_j / Σs
+     bilah        a_j = x_j − ov
+     tinggi       h_j = 1,25 · x_j       (aspect-ratio 4:5)
 
-   Waktu satu kartu disorot, tetangganya melepas margin negatif dan sisa
-   kipas bergeser ke kanan; ruangnya diambil dari kartu-kartu itu sendiri
-   yang menyusut ov/n — jadi lebar totalnya tetap W. Dengan lebar kartu
-   yang dipatok, kedua keadaan itu mustahil sama-sama 100%: menggeser
-   ekornya selalu menambah lebar.
+   s_j sendiri ditulis fitFan: 1 di tengah, mengecil ke dua tepi menurut
+   --dc-taper. Dengan lebar yang dipatok px, jumlahnya harus dipaskan
+   sendiri ke W dan tiap pembulatan menyisakan celah di ujung kanan.
 
-   --dc-overlap satu-satunya knob: makin besar, kartunya makin lebar dan
-   makin dalam bertumpuk. */
+   Dua knob, keduanya di .dc-stack: --dc-overlap (makin besar, kartunya
+   makin lebar, makin tinggi, dan makin dalam bertumpuk) dan --dc-taper
+   (makin besar, makin curam mengecilnya ke tepi). */
 .dc-stack {
-  --dc-overlap: 96px;
+  /* Sejak tingginya dipatok aspect-ratio 4:5, knob ini ikut mengatur TINGGI:
+     h = 1,25 · x. Di 96px kartunya jadi jauh lebih jangkung dari yang dimaui
+     di kolom split; 56px menahan kartu tengah di kisaran ~150px tanpa
+     mengubah lebar bilah yang terlihat — bilahnya hampir tidak bergantung
+     pada ov, karena kipasnya toh selalu selebar W. */
+  --dc-overlap: 56px;
+  /* Seberapa cepat kartunya mengecil ke tepi; angkanya persis selisih yang
+     dituju di kartu terjauh. 0 = semua sama besar seperti dulu; 0,10 berarti
+     kartu paling tepi 90% dari kartu tengah — sebelumnya 0,35 (65%) dan di
+     situ bilah kartu tepi tinggal ~25px, terlalu sesak untuk label persennya.
+     Yang di antaranya menurun linear terhadap jaraknya dari pusat. Dibaca
+     fitFan, yang menerjemahkannya jadi flex-grow tiap kartu — ditaruh di sini
+     supaya satu tempat yang sama dengan --dc-overlap. */
+  --dc-taper: 0.10;
   display: flex;
-  align-items: stretch;
+  /* center, dan yang penting BUKAN stretch: stretch memaksa tiap kartu
+     setinggi barisnya dan itu menimpa aspect-ratio 4:5 di .dc-card —
+     tingginya jadi ikut isi kartu tertinggi, bukan ikut lebarnya.
+     Karena kartunya sekarang mengecil ke tepi, tingginya pun berbeda-beda:
+     center menyejajarkannya pada satu garis tengah, jadi kipasnya menyempit
+     simetris ke atas DAN ke bawah — bukan menggantung dari tepi atas. */
+  align-items: center;
+  /* Kipasnya jadi konteks penumpukannya sendiri. Tanpa ini z-index kartu
+     dihitung terhadap SELURUH halaman, jadi kartu terangkat yang z-nya 999
+     duduk di atas sidebar (z 50) — waktu sidebar dibuka, kartunya menimpa
+     menu. Dengan isolate, angka setinggi apa pun di dalam kipas cuma berlaku
+     antar kartu; kipasnya sendiri tetap ikut urutan normal halaman. */
+  isolation: isolate;
+  /* pan-y, bukan none: gerakan MENDATAR di atas kipas jadi milik kita — itu
+     jari yang sedang menyusuri kartu, dan tanpa ini browser memakannya sebagai
+     gestur lalu mengirim pointercancel di tengah jalan. Gerakan MENURUN tetap
+     dilepas ke halaman, jadi kipas yang selebar layar di ponsel tidak berubah
+     jadi perangkap yang membuat halaman tidak bisa digulung. */
+  touch-action: pan-y;
   /* Kelonggaran untuk kartu yang terangkat: naik 3px dan bayangannya
      jatuh ~22px ke bawah. Tanpa ini keduanya terpotong .section yang
      overflow-nya hidden. */
@@ -3923,10 +3955,14 @@
 }
 
 .dc-card {
-  /* basis 0 + grow 1: seluruh lebar kolom dibagi rata, jadi kartunya
-     selalu sama lebar dan kipasnya persis 100% — berapa pun kategorinya
-     dan selebar apa pun sectionnya. */
-  flex: 1 1 0;
+  /* basis 0 + grow menurut --dc-s: seluruh lebar kolom dibagi menurut
+     perbandingan grow, jadi kipasnya tetap persis 100% — berapa pun
+     kategorinya dan selebar apa pun sectionnya — sementara jatah tiap kartu
+     boleh berbeda. --dc-s ditulis fitFan per kartu (1 di tengah, mengecil ke
+     tepi); tanpa JS nilai defaultnya 1, artinya kipas rata seperti dulu. */
+  flex-grow: var(--dc-s, 1);
+  flex-shrink: 1;
+  flex-basis: 0;
   min-width: 0;
   position: relative;
   /* Ditulis inline per kartu oleh renderCatCards: naik menuju tengah, jadi
@@ -3939,14 +3975,41 @@
   flex-direction: column;
   justify-content: space-between;
   gap: 8px;
-  min-height: 104px;
-  /* Padding kiri sengaja tipis: ia memakan bilah yang terlihat, dan di situ
-     pula label persen harus muat. */
-  padding: 10px 7px;
+  /* Proporsi kartu: lebar : tinggi = 4 : 5, berapa pun lebar kolomnya.
+     Lebarnya sudah dijatah flex (x = (W + (n−1)·ov) / n), jadi tingginya
+     tinggal diturunkan dari situ — makin banyak kategori kartunya makin
+     sempit DAN makin pendek, seirama.
+     Kalau kartunya terlalu pendek untuk namanya, .dc-card-name yang
+     overflow:hidden yang memotong — bukan kartunya yang memanjang. */
+  aspect-ratio: 4 / 5;
+  /* WAJIB, dan bukan sekadar pengaman. Anak flex bawaannya min-height:auto,
+     dan pada kotak ber-aspect-ratio nilai auto itu diartikan "setinggi
+     min-content" — jadi kartu yang isinya kebetulan lebih panjang (nama
+     panjang + persen tegak, keduanya nowrap sehingga min-content-nya sepanjang
+     teksnya) MENOLAK dipendekkan dan tumbuh melewati tinggi 4:5-nya. Hasilnya
+     persis kejanggalan yang terlihat: satu kartu di tepi malah lebih jangkung
+     dari tetangganya yang lebih dekat ke pusat, padahal lebarnya sudah benar.
+     Dengan 0, rasionya yang menang dan urutan besar-kecilnya rapi lagi;
+     isi yang tidak muat ditangani .dc-card-name yang menyusut lalu terpotong. */
+  min-height: 0;
+  /* Padding mendatar sengaja tipis: ia memakan bilah yang terlihat, dan di
+     situ nama dan label persen harus muat berdua. Lewat custom property
+     karena ukuran nama dan persen dihitung dari sisa bilah setelah dikurangi
+     padding ini — dua tempat, satu angka. */
+  --dc-padx: 7px;
+  padding: 10px var(--dc-padx);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--bg);
   cursor: pointer;
+  /* Jari yang ditahan lalu digeser di atas teks akan memulai seleksi teks —
+     di tengah gerakan menyusuri kipas itu memunculkan sorotan biru dan
+     pegangan seleksi. Kartunya memang untuk disentuh, bukan disalin. */
+  user-select: none;
+  -webkit-user-select: none;
+  /* Kotak abu-abu yang berkedip tiap kartu disentuh: bawaan browser ponsel,
+     dan di sini ia justru menutupi animasi terangkatnya sendiri. */
+  -webkit-tap-highlight-color: transparent;
   /* margin tidak ikut beranimasi: tidak ada satu pun yang mengubahnya lagi. */
   transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
 }
@@ -3962,12 +4025,35 @@
    memindahkan class ini — waktu disorot, difokus, di-tap, dan waktu kursor
    meninggalkan kipas (kembali ke kartu terbesar). */
 .dc-card.is-active {
+  /* Cuma perlu mengalahkan --dc-z kartu lain (paling tinggi = jumlah
+     kategori). Angka besarnya aman karena .dc-stack sudah isolation:isolate —
+     ia tidak pernah sampai bersaing dengan sidebar atau modal. */
   z-index: 999;
   transform: translateY(-3px);
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
+  /* Dua lapis: yang pertama bayangan terangkatnya, yang kedua jahitan ke KIRI
+     dan KANAN sekaligus — kartu puncak menindih kedua tetangganya, jadi
+     bayangan searah saja menyisakan satu sisi yang datar. */
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12),
+              0 0 9px -3px rgba(0, 0, 0, 0.18);
   outline: none;
   border-color: var(--text-muted);
 }
+
+/* Bayangan di jahitan antar kartu, ada terus tanpa perlu disorot — itu yang
+   membuat tumpukannya terbaca sebagai kartu yang saling menindih, bukan
+   sederet kotak yang kebetulan berdempetan.
+   Arahnya mengikuti siapa menindih siapa, dan itu ditentukan z-index yang
+   menanjak ke pusat: kartu di KIRI pusat z-nya lebih tinggi dari tetangga
+   kirinya, jadi ia menindih ke kiri dan bayangannya jatuh ke kiri. Yang di
+   KANAN pusat sebaliknya. Dipasang terbalik, bayangannya jatuh ke sisi yang
+   justru tertutup tetangganya — tidak akan pernah terlihat.
+   Ketiganya (is-left / is-right / is-active) saling meniadakan di applyShape,
+   jadi tidak ada kartu yang kena dua aturan sekaligus.
+   Sebaran negatif menahan bayangannya tetap tipis di dekat tepi; box-shadow
+   sudah ikut transition .dc-card, jadi waktu puncaknya berpindah arah
+   bayangannya ikut berputar halus. */
+.dc-card.is-left  { box-shadow: -3px 0 7px -3px rgba(0, 0, 0, 0.16); }
+.dc-card.is-right { box-shadow:  3px 0 7px -3px rgba(0, 0, 0, 0.16); }
 
 /* Tidak ada kartu yang digeser waktu ada yang dibuka, dan itu disengaja.
    Melepas margin negatif tetangga kanannya membuat tetangga itu melangkah
@@ -3986,10 +4072,27 @@
   transform: rotate(180deg);
   align-self: flex-start;
   max-height: 76px;
+  /* Anak flex kolom bawaannya min-height:auto — ia menolak menyusut di bawah
+     panjang teksnya. Di kartu pendek (kipas rapat di layar sempit) itu
+     membuat nama + persen lebih tinggi dari kartunya dan meluber keluar,
+     karena tinggi kartu sekarang dipatok aspect-ratio. Dengan min-height:0 ia
+     ikut menyusut, dan overflow:hidden di bawah yang memotong ujung namanya. */
+  min-height: 0;
   overflow: hidden;
-  font-size: 10.5px;
+  /* Teks tegak: LEBARNYA sama dengan font-size-nya. Jadi supaya nama tidak
+     pernah melewati bilah, ukurannya dipatok pada sisa bilah setelah padding
+     — persis rumus yang sama dipakai .dc-card-val di bawah, karena keduanya
+     berbagi lebar yang sama itu. Di kolom lebar sisanya puluhan px, jadi
+     ukurannya menyentuh batas atas 10,5px dan tampak seperti sebelumnya; di
+     ponsel bilahnya cuma ~9px dan namanya ikut mengecil ke situ, bukan
+     meluber ke kartu sebelah. */
+  font-size: clamp(8px, calc(var(--dc-advance, 20px) - 2 * var(--dc-padx, 7px)), 10.5px);
   font-weight: 600;
-  line-height: 1.2;
+  /* Pada teks tegak, line-height itu LEBAR kotak barisnya, bukan tingginya.
+     Dibiarkan 1,2 lebarnya jadi 1,2 × font-size dan perhitungan di atas
+     meleset 20% — cukup untuk membuatnya menyembul dari bilah di ponsel.
+     Dengan 1, lebarnya persis sebesar hurufnya. */
+  line-height: 1;
   letter-spacing: 0.01em;
   color: var(--text-mid);
   white-space: nowrap;
@@ -4005,35 +4108,71 @@
   text-align: right;
 }
 
-/* Persennya selalu terlihat, di pojok kiri bawah — sisi kiri kartu itu
-   justru bagian yang TIDAK tertutup kartu berikutnya, jadi angkanya
-   terbaca tanpa perlu disorot dulu.
+/* Persennya selalu terlihat, di ujung bilah yang tidak tertutup kartu
+   sebelahnya, jadi angkanya terbaca tanpa perlu disorot dulu.
 
-   Ukurannya ikut lebar bilah yang tersedia (--dc-advance, ditulis fitFan):
-   di kolom 1100px bilahnya cuma ~28px dan 13px pasti terpotong, sementara
-   di layar lebar bilahnya ~57px dan ukuran kecil malah terbaca kerdil.
-   Faktor 0,22 kira-kira menyamakan lebar teks "12.40%" dengan bilahnya. */
+   Waktu diam ia ditulis TEGAK seperti namanya. Mendatar, "12.40%" butuh
+   ~43px sementara bilahnya cuma 37px di kolom split dan ~10px di ponsel —
+   angkanya melewati bilah dan bertabrakan dengan nama kartu di sebelahnya.
+   Tegak, lebar yang dipakainya cuma setinggi hurufnya, jadi ia tidak pernah
+   bisa keluar dari bilah berapa pun sempitnya; yang panjang tinggal ke bawah,
+   ke ruang yang memang kosong.
+
+   Ukurannya dari sisa bilah setelah padding, rumus yang sama dengan namanya —
+   satu-satunya cara memastikan KEDUANYA muat di lebar yang sama. */
 .dc-card-val {
   align-self: flex-start;
+  writing-mode: vertical-rl;
+  /* Searah dengan namanya: dibaca dari bawah ke atas, bukan berlawanan. */
+  transform: rotate(180deg);
   font-family: var(--font-mono);
-  font-size: clamp(8px, calc((var(--dc-advance, 20px) - 7px) * 0.27), 12px);
+  font-size: clamp(7px, calc(var(--dc-advance, 20px) - 2 * var(--dc-padx, 7px)), 11px);
+  /* Sama seperti pada nama: tegak, line-height itu lebar kotak barisnya.
+     1 berarti selebar hurufnya, jadi rumus di atas berlaku apa adanya. */
+  line-height: 1;
   font-weight: 700;
   color: var(--text);
   letter-spacing: -0.03em;
   white-space: nowrap;
-  transition: font-size 0.22s ease;
 }
 
-/* Kartu yang terangkat tidak lagi dibatasi lebar bilah — seluruh 108px-nya
-   terlihat, jadi angkanya boleh tampil seukuran penuh. */
+/* Kartu yang terangkat tidak lagi dibatasi lebar bilah — seluruh kartunya
+   terlihat (~107px di kolom split, ~83px di ponsel), jadi angkanya kembali
+   MENDATAR dan seukuran penuh. Di situ pula angka itu paling dibutuhkan:
+   kartu yang sedang dibaca. Yang tegak cuma keadaan diam, waktu ruangnya
+   memang tinggal sebilah.
+
+   Peralihannya sengaja tidak dianimasikan: writing-mode memang tidak bisa
+   di-transition, dan menganimasikan font-size-nya saja justru membuat
+   angkanya membesar SETELAH arahnya berganti — dua gerakan untuk satu
+   perubahan. Tinggi kartunya sendiri tidak ikut berubah, karena aspect-ratio
+   yang memegangnya, bukan isinya. */
 .dc-card.is-active .dc-card-val {
+  writing-mode: horizontal-tb;
+  transform: none;
   font-size: 13px;
+  line-height: 16px;
 }
 
 @media (max-width: 640px) {
-  /* Di ponsel kolomnya selebar layar; tumpangannya dikurangi supaya bilah
-     tiap kartu lebih lebar dan lebih mudah dijadikan sasaran jari. */
-  .dc-stack { --dc-overlap: 76px; }
+  /* Di ponsel W-nya kecil, jadi lebar kartu praktis ditentukan tumpangannya
+     sendiri (x ≈ ov waktu n besar). Ditahan sedikit di atas angka desktop
+     supaya kartunya tidak menciut di bawah ~120px — di bawah itu nama tegak
+     dan label persennya sudah tidak muat berdua dan namanya mulai terpotong. */
+  .dc-stack { --dc-overlap: 60px; }
+
+  /* Bilah di ponsel cuma ~17px di kartu terjauh. Dengan padding 7px kiri-kanan
+     yang tersisa untuk isi tinggal 3px — lebih sempit dari huruf terkecil
+     sekalipun, jadi nama dan persennya pasti menyembul keluar bilah dan
+     menabrak kartu sebelahnya. 4px menyisakan ~9px, cukup untuk keduanya di
+     ukuran terkecilnya.
+     Padding atas-bawah dan jaraknya ikut dirapatkan: kartunya cuma ~96px
+     tinggi di situ, dan nama tegak + persen tegak harus muat berdua. */
+  .dc-card {
+    --dc-padx: 4px;
+    padding: 6px var(--dc-padx);
+    gap: 4px;
+  }
 }
 
 /* Barisan KPI tidak perlu breakpoint sendiri: .kpi-row sudah flex-wrap dan

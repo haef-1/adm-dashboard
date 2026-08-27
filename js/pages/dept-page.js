@@ -166,6 +166,15 @@ function createDeptPage(cfg) {
   // Kartu yang sedang diangkat di kipas. Disimpan di luar render supaya
   // pilihannya tidak hilang tiap section digambar ulang.
   let _catActive = -1;
+  // Posisi kartu TERBESAR di kipas — pusat yang dipakai menghitung mengecilnya
+  // kartu ke tepi. Disimpan di luar render karena ResizeObserver menghitung
+  // ulang lebar kipas tanpa menggambar ulang kartunya, jadi ia tidak punya
+  // jalan lain untuk tahu kartu mana yang jadi pusat.
+  let _catCenter = -1;
+  // Pengangkat kartu milik gambar terakhir. Listener sentuh dan mouseleave
+  // menempel pada .dc-stack yang umurnya melampaui isinya, jadi ia butuh
+  // rujukan yang selalu menunjuk ke kartu yang sekarang ada di layar.
+  let _catLift = null;
 
   const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
 
@@ -541,7 +550,6 @@ function createDeptPage(cfg) {
           <div class="cu-body">
             <div class="cu-card-title cu-kpi-title">${esc(cfg.cards.title)}</div>
             <div class="dc-stack" id="cuCatStack"></div>
-            <div class="cu-kpi-note" id="cuCatNote"></div>
             <div class="cu-empty" id="cuCatEmpty">Tidak ada data untuk periode ini</div>
           </div>
         </div>
@@ -687,6 +695,9 @@ function createDeptPage(cfg) {
     closeRangePicker();
     if (cuRo) { cuRo.disconnect(); cuRo = null; }
     if (catRo) { catRo.disconnect(); catRo = null; }
+    // Kipas yang lama ikut dibuang bersama containernya; menahan lift-nya cuma
+    // membuat listener yang belum sempat lepas menyentuh kartu yang sudah mati.
+    _catLift = null;
     cuCanvas = null;
     destroyKpiChart();
   }
@@ -1242,27 +1253,85 @@ function createDeptPage(cfg) {
   //
   // Lebar kipasnya karena itu selalu pas selebar kolomnya — dan karena tidak
   // pernah melebihi kolom, tidak ada scrollbar yang perlu dimunculkan.
-  // Lebar kartu maupun tumpangannya diurus CSS sepenuhnya (flex:1 1 0 +
-  // --dc-overlap), jadi yang tersisa di sini cuma satu hal yang tidak bisa
-  // dihitung CSS: lebar BILAH yang terlihat saat kartunya diam, karena itu
-  // bergantung pada jumlah kategori.
   //
-  //   a = (W − ov) / n
+  // Kartunya mengecil ke tepi: yang di tengah paling besar, makin jauh dari
+  // pusat makin kecil, dengan rasio 4:5 yang sama (tingginya ikut lebar lewat
+  // aspect-ratio, jadi cukup lebarnya saja yang diatur di sini).
   //
-  // Dipakai untuk menyetel ukuran label persen di pojok kiri bawah — di
-  // kolom sempit bilahnya cuma ~27px dan angka seukuran penuh tidak muat.
+  //   s_j = 1 − taper · |j − mid| / mid        mid = (n − 1) / 2
+  //
+  // s_j dipasang sebagai flex-grow, BUKAN sebagai width. Dengan basis 0,
+  // flexbox membagi seluruh ruang bebas menurut perbandingan grow — jadi
+  // kipasnya tetap persis selebar kolom seperti waktu semua kartu flex:1,
+  // cuma jatahnya sekarang tidak rata:
+  //
+  //   ruang bebas  F = W + (n − 1)·ov         (margin negatif ikut jadi ruang)
+  //   lebar kartu  x_j = F · s_j / Σs
+  //
+  // Kalau lebarnya dipatok px per kartu, jumlahnya harus dipaskan sendiri ke W
+  // dan setiap pembulatan menyisakan celah di ujung kanan.
+  // Jaraknya dihitung terhadap kartu TERBESAR, bukan terhadap titik tengah
+  // geometris. Untuk n ganjil keduanya sama, tapi untuk n genap pusat
+  // geometrisnya jatuh di antara dua kartu — dan di situ dua kartu jadi
+  // sama-sama paling besar, padahal cuma satu yang kategorinya terbesar.
+  // Pembaginya jarak terjauh dari pusat itu, jadi kartu paling ujung tetap
+  // tepat sebesar (1 − taper) betapa pun tidak simetrisnya posisi pusat.
+  function dcScale(j, n, peak, taper) {
+    if (n < 2) return 1;
+    const far = Math.max(peak, n - 1 - peak);
+    return far ? 1 - taper * (Math.abs(j - peak) / far) : 1;
+  }
+
   function fitFan(stack, n) {
     if (!stack || n < 1) return;
     const avail = stack.clientWidth;
     if (!avail) return;
-    const ov = parseFloat(getComputedStyle(stack).getPropertyValue('--dc-overlap')) || 0;
-    const advance = n < 2 ? avail : Math.max(0, (avail - ov) / n);
-    stack.style.setProperty('--dc-advance', advance + 'px');
+    const cs = getComputedStyle(stack);
+    const ov = parseFloat(cs.getPropertyValue('--dc-overlap')) || 0;
+    const t = parseFloat(cs.getPropertyValue('--dc-taper'));
+    const taper = isNaN(t) ? 0 : Math.min(0.9, Math.max(0, t));
+    // Kalau kartunya belum pernah digambar (_catCenter masih -1), pusatnya
+    // jatuh ke tengah kipas — sama dengan susunan memusat di renderCatCards.
+    const peak = _catCenter >= 0 && _catCenter < n ? _catCenter : (n - 1) / 2;
+
+    const s = [];
+    let sum = 0;
+    for (let j = 0; j < n; j++) { const v = dcScale(j, n, peak, taper); s.push(v); sum += v; }
+
+    const free = avail + (n - 1) * ov;
+    for (let j = 0; j < n; j++) {
+      const card = stack.children[j];
+      if (!card) continue;
+      card.style.setProperty('--dc-s', s[j]);
+      // Satu hal yang tidak bisa dihitung CSS: lebar BILAH yang terlihat waktu
+      // kartunya diam. Tiap kartu tertutup tetangganya selebar ov tepat — yang
+      // di kiri pusat tertutup dari kanan, yang di kanan tertutup dari kiri —
+      // jadi bilahnya x_j − ov. Sejak kartunya mengecil ke tepi, angka itu
+      // berbeda per kartu, jadi ditulis per kartu juga: label persen di kartu
+      // tepi harus mengecil mengikuti bilahnya sendiri, bukan bilah rata-rata.
+      const x = n < 2 ? avail : free * s[j] / sum;
+      card.style.setProperty('--dc-advance', (n < 2 ? x : Math.max(0, x - ov)) + 'px');
+    }
+  }
+
+  // Nama kategori dipendekkan waktu DIGAMBAR saja — kamus dept_categorized,
+  // pengelompokan di catAggregate, maupun kunci config merge tetap memakai nama
+  // aslinya. Yang dipendekkan cuma yang terbaca di bilah kartu: bilahnya cuma
+  // ~27px di kolom sempit dan namanya ditulis tegak, jadi "CINCANG CAMPUR"
+  // kepanjangan dan terpotong di tengah kata.
+  //
+  // Dipetakan per KATA, bukan per nama utuh: satu entri 'CINCANG' melayani
+  // CAMPUR/DADA/PAHA sekaligus, jadi kategori baru dengan kata yang sama ikut
+  // terlayani tanpa perlu ditambah lagi. Nama utuhnya tetap dipakai untuk
+  // aria-label, supaya yang dibacakan pembaca layar bukan singkatan.
+  const catAbbr = (cfg.cards && cfg.cards.abbr) || {};
+
+  function catLabel(name) {
+    return name.split(' ').map(w => catAbbr[w] || w).join(' ');
   }
 
   function renderCatCards() {
     const stack = document.getElementById('cuCatStack');
-    const note = document.getElementById('cuCatNote');
     const empty = document.getElementById('cuCatEmpty');
     if (!stack || !empty) return;
 
@@ -1300,6 +1369,9 @@ function createDeptPage(cfg) {
     // Kartu terbesar terangkat sejak awal — itu yang paling ingin dibaca, dan
     // di tengah ia memang sudah paling atas.
     _catActive = centerPos;
+    // Pusat mengecilnya kartu ke tepi ikut kartu terbesar itu juga, bukan titik
+    // tengah kipas: yang diminta "makin jauh dari kartu TERBESAR makin kecil".
+    _catCenter = centerPos;
 
     // Kartunya digambar polos; puncak tumpukan, sisi label, dan kartu yang
     // terangkat semuanya dipasang applyShape() di bawah — satu tempat, supaya
@@ -1307,7 +1379,7 @@ function createDeptPage(cfg) {
     stack.innerHTML = arranged.map((c, i) => `
       <div class="dc-card" data-i="${i}" tabindex="0" role="button"
            aria-label="${esc(c.name)} ${esc(fmtPct(c.pct, 2))}">
-        <div class="dc-card-name">${esc(c.name)}</div>
+        <div class="dc-card-name">${esc(catLabel(c.name))}</div>
         <div class="dc-card-val">${esc(fmtPct(c.pct, 2))}</div>
       </div>`).join('');
 
@@ -1346,36 +1418,82 @@ function createDeptPage(cfg) {
 
     const lift = (i) => { _catActive = i; applyShape(i); };
     lift(centerPos);
+    // Dipegang di luar render supaya listener di level .dc-stack — yang
+    // dipasang sekali seumur elemennya — selalu memanggil lift milik gambar
+    // TERAKHIR, bukan lift dari render pertama yang kartu-kartunya sudah
+    // dibuang.
+    _catLift = lift;
 
     cards.forEach((card, i) => {
       // mouseenter, bukan mouseover: yang kedua ikut menyala lagi tiap kursor
       // berpindah antar anak elemen di dalam kartu yang sama.
       card.addEventListener('mouseenter', () => lift(i));
-      // Sentuh tidak pernah memicu mouseenter, jadi tap dilayani terpisah.
+      // Tap tunggal tanpa digeser: pointerdown di bawah sebenarnya sudah
+      // mengangkatnya, tapi click tetap dipasang sebagai jalur cadangan kalau
+      // pointer event tidak tersedia.
       card.addEventListener('click', () => lift(i));
       card.addEventListener('focus', () => lift(i));
     });
 
+    // Listener di bawah menempel pada .dc-stack, dan elemen itu BERTAHAN
+    // melintasi renderCatCards — yang diganti cuma innerHTML-nya. Dipasang
+    // tiap render, satu mouseleave berubah jadi belasan setelah beberapa kali
+    // ganti dept, semuanya memanggil lift milik render lama yang kartunya
+    // sudah tidak ada di DOM. Karena itu ditandai sekali di elemennya, dan
+    // isinya membaca _catLift/_catCenter, bukan variabel render.
+    if (stack.dataset.dcBound) return;
+    stack.dataset.dcBound = '1';
+
     // mouseleave pada wadahnya, bukan pada tiap kartu: berpindah antar kartu
     // tidak keluar dari kipas, jadi angkatannya tidak berkedip di tengah.
-    stack.addEventListener('mouseleave', () => lift(centerPos));
+    stack.addEventListener('mouseleave', () => _catLift && _catLift(_catCenter));
     stack.addEventListener('focusout', (e) => {
-      if (!stack.contains(e.relatedTarget)) lift(centerPos);
+      if (!stack.contains(e.relatedTarget)) _catLift && _catLift(_catCenter);
     });
 
-    if (!note) return;
-    if (!hasData) { note.textContent = ''; return; }
+    // ── Sentuh: hover yang mengikuti jari ──
+    // Layar sentuh tidak punya hover. Jari yang menyapu kipas tidak
+    // menghasilkan satu pun mouseenter, jadi tanpa ini kartunya cuma bisa
+    // dipindah per tap — animasinya ada, tapi gerak menyusurinya hilang.
+    //
+    // Kartu di bawah jari dicari lewat elementFromPoint, BUKAN dengan
+    // pointerenter di tiap kartu: begitu pointerdown terjadi, browser
+    // mengunci seluruh pointer event berikutnya ke elemen yang pertama
+    // disentuh (implicit pointer capture), jadi kartu lain tidak akan pernah
+    // kebagian pointerenter selama jari masih menempel.
+    //
+    // Indeksnya dibaca dari DOM (bukan dari array cards render ini) karena
+    // handler ini hidup lebih lama dari render yang memasangnya.
+    let tracking = false;
 
-    // Dua angka penutup: berapa yang terbaca sebagai kategori, dan berapa yang
-    // tidak. Yang kedua penjaga kalau kode material di kamus ternyata tidak
-    // sama bentuknya dengan yang ada di data produksi — tanpa itu selisihnya
-    // cuma tampak sebagai kartu-kartu yang diam-diam kekecilan.
-    const total = agg.cats.reduce((a, c) => a + c.pct, 0);
-    const lainPct = agg.bahanKg ? (agg.lainKg / agg.bahanKg) * 100 : 0;
-    note.textContent = agg.cats.length + ' kategori · total ' + fmtPct(total, 2)
-      + (agg.lainKg > 0
-        ? ' · ' + fmtNum(agg.lainKg) + ' kg (' + fmtPct(lainPct, 2) + ') tanpa kategori'
-        : '');
+    const liftAtPoint = (x, y) => {
+      const el = document.elementFromPoint(x, y);
+      const card = el && el.closest ? el.closest('.dc-card') : null;
+      if (!card || card.parentElement !== stack) return;
+      const i = [...stack.children].indexOf(card);
+      if (i >= 0 && i !== _catActive && _catLift) _catLift(i);
+    };
+
+    stack.addEventListener('pointerdown', (e) => {
+      // Kursor sudah dilayani mouseenter; ikut campur di sini cuma membuat
+      // kartunya berpindah dua kali untuk satu gerakan.
+      if (e.pointerType === 'mouse') return;
+      tracking = true;
+      liftAtPoint(e.clientX, e.clientY);
+    });
+
+    stack.addEventListener('pointermove', (e) => {
+      if (tracking) liftAtPoint(e.clientX, e.clientY);
+    });
+
+    // Jari diangkat: kartunya dibiarkan tetap terbuka. Tidak ada "kursor
+    // meninggalkan kipas" di layar sentuh, dan menutupnya sendiri justru
+    // menghapus kartu yang baru saja dibuka sebelum sempat dibaca.
+    // pointercancel ikut didengarkan karena itulah yang datang waktu browser
+    // mengambil alih gerakannya untuk menggulung halaman.
+    const stopTracking = () => { tracking = false; };
+    stack.addEventListener('pointerup', stopTracking);
+    stack.addEventListener('pointercancel', stopTracking);
   }
 
   // ═══════════════════════════════════════
