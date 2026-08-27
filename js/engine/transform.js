@@ -39,6 +39,54 @@ const Engine = (() => {
   // ── Distribution dept list ──
   const DIST_DEPTS = new Set(['AU','CUT UP','BONELESS BONGKAR','BONELESS MIX','PARTING']);
 
+  // ── Kamus kode material → kategori produk ──
+  // Reference data dari tabel dept_categorized, dimuat sekali saat boot.
+  // Dipakai section Dept Card Perform di halaman Boneless.
+  //
+  // Datar, tanpa dept: kategori itu sifat materialnya. Dept yang dipilih user
+  // menyaring baris data bulanan, bukan kamus ini — jadi satu peta melayani
+  // semua dept sekaligus.
+  let _matCat = new Map();
+  // Dinaikkan tiap peta diganti. Yang menyimpan hasil hitungan per kategori
+  // memasukkannya ke kunci cache: peta baru berarti jawaban lama tidak berlaku,
+  // dan panjang RAW_DB saja tidak menangkap itu.
+  let _matCatVer = 0;
+  // Bentuk siap pakai: kategori per INDEKS lookup mat, jadi yang menghitung
+  // tinggal membaca larik lewat r[3] alih-alih memanggil fungsi per baris.
+  // Dibangun ulang kalau R_MAT tumbuh (import baru) atau petanya diganti.
+  let _catByMatIdx = null, _catByMatLen = -1, _catByMatVer = -1;
+
+  // Kode dinormalkan sebelum dicocokkan: sisi kamus datang dari file Excel yang
+  // disunting tangan, sisi data dari export SAP. Nol di depan bisa hilang di
+  // salah satunya tanpa mengubah artinya, jadi keduanya dilucuti.
+  function normMat(v) {
+    const s = String(v == null ? '' : v).trim().toUpperCase();
+    return s.replace(/^0+/, '') || s;
+  }
+
+  function setDeptCategories(list) {
+    _matCat = new Map();
+    (list || []).forEach(r => {
+      const k = normMat(r.mat);
+      if (k && r.category) _matCat.set(k, String(r.category).trim().toUpperCase());
+    });
+    _catByMatIdx = null;
+    _matCatVer++;
+  }
+
+  function getCatByMatIndex() {
+    if (_catByMatIdx && _catByMatLen === R_MAT.length && _catByMatVer === _matCatVer) {
+      return _catByMatIdx;
+    }
+    _catByMatIdx = R_MAT.map(code => _matCat.get(normMat(code)) || null);
+    _catByMatLen = R_MAT.length;
+    _catByMatVer = _matCatVer;
+    return _catByMatIdx;
+  }
+
+  function hasDeptCategories() { return _matCat.size > 0; }
+  function getDeptCategoriesVersion() { return _matCatVer; }
+
   // ── Setter for lookup tables ──
   function setLookups(lookups) {
     if (lookups.dept) R_DEPT = lookups.dept;
@@ -663,5 +711,6 @@ const Engine = (() => {
     searchMaterial, calcMaterialValue, getMaterialFilterOptions, materialMatchesFilter,
     calcMaterialValueRange, getMaterialFilterOptionsRange, materialMatchesFilterRange,
     getRowsForDates, LB_SIZE_MAP, DIST_DEPTS, R_MVT, R_SLOC,
+    setDeptCategories, getCatByMatIndex, hasDeptCategories, getDeptCategoriesVersion,
   };
 })();

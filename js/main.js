@@ -133,10 +133,19 @@ const App = (() => {
     const lookups = await DB.getMeta('lookups');
     if (lookups && Object.keys(lookups).length) Engine.setLookups(lookups);
 
+    // Kamus kategori material: tabel kecil, sekali ambil, dan tidak boleh
+    // menggagalkan boot kalau tabelnya belum dibuat. Diambil berbarengan
+    // dengan daftar bulan di bawah supaya tidak menambah satu putaran jaringan
+    // ke jalur boot.
+    const catsPromise = DB.getDeptCategories()
+      .then(cats => { Engine.setDeptCategories(cats); return cats.length; })
+      .catch(err => { console.warn('[App] kamus kategori gagal dimuat:', err.message); return 0; });
+
     const months = ((await DB.getMeta('months')) || []).slice().sort().reverse();
 
     if (months.length === 0) {
       console.log('[App] No data yet. Import an Excel file to start.');
+      await catsPromise;
       Navbar.init();
       return;
     }
@@ -146,6 +155,11 @@ const App = (() => {
     const latestRows = await DB.loadMonth(months[0]);
     Engine.setRawDB(latestRows);
     console.log('[App] ' + months[0] + ': ' + latestRows.length + ' rows — first render');
+
+    // Ditunggu tepat sebelum halaman pertama digambar, bukan saat diminta:
+    // requestnya berjalan berbarengan dengan pemuatan bulan di atas, jadi
+    // biasanya sudah selesai dan await ini tidak menambah waktu tunggu.
+    console.log('[App] kamus kategori material: ' + (await catsPromise) + ' material');
 
     hideSeedOverlay();
     Navbar.init();

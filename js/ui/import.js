@@ -87,13 +87,20 @@ const ImportUI = (() => {
       }
 
       // ══════ Gate 0: Router — file ini milik DB mana? ══════
-      // Judul kolom kedua file tidak beririsan sama sekali:
+      // Judul kolom ketiga file tidak beririsan sama sekali:
       //   file produksi → 'mvt type', 'post date', 'qty brd'
       //   file TTA      → 'create time', 'departement tujuan'
+      //   file kategori → 'cat', tanpa 'mvt type'
       const headerRow = json[0].map(h => String(h || '').toLowerCase().trim());
 
       if (headerRow.includes('create time') || headerRow.includes('departement tujuan')) {
         return TTAImportUI.process(json);   // → tta_monthly_data
+      }
+      // 'cat' saja tidak cukup untuk membedakan: file produksi juga punya kolom
+      // 'material'. Yang memisahkan keduanya 'mvt type' — file kamus tidak
+      // punya baris pergerakan, cuma daftar material dan kategorinya.
+      if (headerRow.includes('cat') && !headerRow.includes('mvt type')) {
+        return CatImportUI.process(json);   // → dept_categorized
       }
       if (!headerRow.includes('mvt type')) {
         hideOverlay();

@@ -3830,6 +3830,212 @@
   }
 }
 
+/* ── Split halaman: kolom utama + kolom samping ──
+   Cuma halaman yang punya section samping (Boneless) yang membungkus
+   isinya dengan .cu-split; halaman dept lain DOM-nya tidak berubah.
+
+   Urutan sumbernya SAMPING DULU, baru utama — itu urutan yang dipakai
+   waktu kolomnya runtuh: kartu kategori di atas, Yield Boneless di
+   bawahnya. Penempatan kolom di desktop dibalik lewat grid-column, jadi
+   yang berpindah cuma tata letaknya, bukan urutan bacanya.
+
+   Di bawah 1100px sengaja tetap display:block, bukan flex/grid satu
+   kolom. Flex item dan grid item sama-sama membentuk BFC baru, dan itu
+   mematikan peleburan margin antar section — jarak menumpuknya langsung
+   jadi dua kali lipat (16px + 16px, bukan 16px). */
+.cu-split { display: block; }
+
+/* 1100px: split-nya cuma untuk laptop ke atas. Tablet ikut menumpuk —
+   di kolom selebar ~380px (tablet potret) kipas kartunya tidak muat dan
+   harus digeser mendatar, dan kolom kirinya terlalu sempit untuk donut
+   plus tabelnya. Angka yang sama dipakai batas 60% di atas, jadi kedua
+   aturan itu berganti pada titik yang sama. */
+@media (min-width: 1100px) {
+  .cu-split {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    /* Jaraknya bukan cuma angka ini: tiap .section masih membawa
+       margin 16px 5px sendiri, jadi celah mendatar sebenarnya
+       5px + gap + 5px. Dipatok 6px supaya totalnya 16px — sama dengan
+       jarak dua section yang bertumpuk (margin atas-bawahnya saling
+       lebur jadi 16px juga), jadi ritme mendatar dan menurun seragam. */
+    gap: 6px;
+    align-items: start;   /* kolom samping tidak ikut setinggi kolom utama */
+  }
+
+  /* Grid item bawaannya min-width:auto — lebar isinya jadi lantai lebar
+     kolomnya. Tanpa ini kipas kartu yang lebih lebar dari jatahnya justru
+     melebarkan kolom samping dan menggencet kolom utama, bukan menggeser
+     isinya sendiri seperti yang diminta overflow-x. Persoalan yang sama
+     sudah pernah kena di #sectionTrafficSearch .section-split. */
+  .cu-split-main,
+  .cu-split-side {
+    min-width: 0;
+  }
+
+  /* Dibalik terhadap urutan sumber: yang ditulis duluan (kartu) justru
+     duduk di kolom kanan. Keduanya dipatok ke baris 1 supaya grid tidak
+     menaruhnya di dua baris terpisah. */
+  .cu-split-main { grid-column: 1; grid-row: 1; }
+  .cu-split-side { grid-column: 2; grid-row: 1; }
+
+  /* Batas 60% di atas dihitung terhadap lebar halaman. Di dalam split
+     lebarnya sudah dijatah grid, jadi kalau dibiarkan ia jadi 60% dari
+     60%. */
+  .cu-split #cuKpiSection,
+  .cu-split #cuChartSection {
+    max-width: none;
+  }
+}
+
+/* ── Kipas kartu kategori (Dept Card Perform) ──
+   Tiap kartu menutupi sisi kanan kartu sebelumnya. z-index naik ke kanan,
+   jadi yang berikutnya duduk di atas yang sebelumnya — persis seperti
+   kartu yang dikipaskan di tangan.
+
+   Lebar kartunya TIDAK dipatok — diturunkan dari lebar section. Semua
+   kartu flex:1 1 0, jadi kipasnya selalu mengisi 100% kolomnya:
+
+     diam   n·x − (n−1)·ov = W   ->  x = (W + (n−1)·ov) / n
+     sorot  n·x − (n−2)·ov = W   ->  x = (W + (n−2)·ov) / n
+     bilah  a = x − ov           ->  a = (W − ov) / n
+
+   Waktu satu kartu disorot, tetangganya melepas margin negatif dan sisa
+   kipas bergeser ke kanan; ruangnya diambil dari kartu-kartu itu sendiri
+   yang menyusut ov/n — jadi lebar totalnya tetap W. Dengan lebar kartu
+   yang dipatok, kedua keadaan itu mustahil sama-sama 100%: menggeser
+   ekornya selalu menambah lebar.
+
+   --dc-overlap satu-satunya knob: makin besar, kartunya makin lebar dan
+   makin dalam bertumpuk. */
+.dc-stack {
+  --dc-overlap: 96px;
+  display: flex;
+  align-items: stretch;
+  /* Kelonggaran untuk kartu yang terangkat: naik 3px dan bayangannya
+     jatuh ~22px ke bawah. Tanpa ini keduanya terpotong .section yang
+     overflow-nya hidden. */
+  padding: 6px 0 12px;
+  /* Sengaja TANPA overflow: lebar kipasnya tetap, jadi tidak pernah ada
+     yang perlu digeser. Dulu overflow-x:auto dipasang sebagai katup
+     pengaman, tapi justru itu yang memunculkan scrollbar — dan
+     overflow-y:hidden yang menyertainya ikut memotong bayangan kartu. */
+}
+
+.dc-card {
+  /* basis 0 + grow 1: seluruh lebar kolom dibagi rata, jadi kartunya
+     selalu sama lebar dan kipasnya persis 100% — berapa pun kategorinya
+     dan selebar apa pun sectionnya. */
+  flex: 1 1 0;
+  min-width: 0;
+  position: relative;
+  /* Ditulis inline per kartu oleh renderCatCards: naik menuju tengah, jadi
+     kartu tengah paling atas dan tumpukannya melandai ke dua tepi. Lewat
+     custom property, bukan z-index inline langsung — supaya aturan :hover
+     di bawah masih bisa mengalahkannya tanpa !important. */
+  z-index: var(--dc-z, 1);
+  margin-left: calc(-1 * var(--dc-overlap));
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 104px;
+  /* Padding kiri sengaja tipis: ia memakan bilah yang terlihat, dan di situ
+     pula label persen harus muat. */
+  padding: 10px 7px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  cursor: pointer;
+  /* margin tidak ikut beranimasi: tidak ada satu pun yang mengubahnya lagi. */
+  transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
+}
+
+.dc-card:first-child { margin-left: 0; }
+
+/* Terangkat: kartunya tampil utuh, dan tetangga kanannya ikut bergeser
+   supaya yang baru terbuka tidak langsung tertutup lagi. */
+/* Satu-satunya keadaan "terangkat", dan selalu tepat satu kartu yang
+   memakainya. Sengaja TIDAK memakai :hover: kartu terbesar sudah membawa
+   .is-active sejak digambar, jadi kalau :hover jadi jalur kedua, menyorot
+   kartu lain menyalakan dua kartu sekaligus. renderCatCards yang
+   memindahkan class ini — waktu disorot, difokus, di-tap, dan waktu kursor
+   meninggalkan kipas (kembali ke kartu terbesar). */
+.dc-card.is-active {
+  z-index: 999;
+  transform: translateY(-3px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
+  outline: none;
+  border-color: var(--text-muted);
+}
+
+/* Tidak ada kartu yang digeser waktu ada yang dibuka, dan itu disengaja.
+   Melepas margin negatif tetangga kanannya membuat tetangga itu melangkah
+   PERSIS ke ujung kanan kartu yang terbuka — sementara kartu di kanannya
+   lagi z-nya lebih rendah, jadi tidak ada yang menutupinya. Hasilnya dua
+   kartu terbuka penuh sekaligus, bukan satu.
+   Kartu yang terbuka toh sudah jadi puncak tumpukan: z-index sendirian
+   sudah membuatnya utuh terlihat, tanpa ada yang perlu minggir. Bonusnya
+   margin tidak pernah berubah, jadi lebar kartunya juga tetap. */
+
+/* Dalam keadaan diam yang terlihat cuma bilah selebar (W − ov)/n — sekitar
+   27px di kolom tersempit. Nama ditulis tegak supaya muat di situ; ditulis
+   mendatar ia cuma jadi dua huruf lalu terpotong. */
+.dc-card-name {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  align-self: flex-start;
+  max-height: 76px;
+  overflow: hidden;
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: 0.01em;
+  color: var(--text-mid);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* Isi kartu selalu duduk di bilah yang benar-benar terlihat. Kartu di kanan
+   tengah tertutup dari KIRI, jadi nama dan angkanya pindah ke tepi kanan —
+   kalau tidak, keduanya justru bersembunyi di balik kartu sebelahnya. */
+.dc-card.is-right .dc-card-name,
+.dc-card.is-right .dc-card-val {
+  align-self: flex-end;
+  text-align: right;
+}
+
+/* Persennya selalu terlihat, di pojok kiri bawah — sisi kiri kartu itu
+   justru bagian yang TIDAK tertutup kartu berikutnya, jadi angkanya
+   terbaca tanpa perlu disorot dulu.
+
+   Ukurannya ikut lebar bilah yang tersedia (--dc-advance, ditulis fitFan):
+   di kolom 1100px bilahnya cuma ~28px dan 13px pasti terpotong, sementara
+   di layar lebar bilahnya ~57px dan ukuran kecil malah terbaca kerdil.
+   Faktor 0,22 kira-kira menyamakan lebar teks "12.40%" dengan bilahnya. */
+.dc-card-val {
+  align-self: flex-start;
+  font-family: var(--font-mono);
+  font-size: clamp(8px, calc((var(--dc-advance, 20px) - 7px) * 0.27), 12px);
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.03em;
+  white-space: nowrap;
+  transition: font-size 0.22s ease;
+}
+
+/* Kartu yang terangkat tidak lagi dibatasi lebar bilah — seluruh 108px-nya
+   terlihat, jadi angkanya boleh tampil seukuran penuh. */
+.dc-card.is-active .dc-card-val {
+  font-size: 13px;
+}
+
+@media (max-width: 640px) {
+  /* Di ponsel kolomnya selebar layar; tumpangannya dikurangi supaya bilah
+     tiap kartu lebih lebar dan lebih mudah dijadikan sasaran jari. */
+  .dc-stack { --dc-overlap: 76px; }
+}
+
 /* Barisan KPI tidak perlu breakpoint sendiri: .kpi-row sudah flex-wrap dan
    .kpi-card punya min-width 150px, jadi kartunya melipat sendiri persis
    seperti di Overview. */

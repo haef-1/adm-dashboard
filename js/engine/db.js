@@ -121,6 +121,49 @@ const DB = (() => {
     return data.value;
   }
 
+  // ── Kamus material → kategori (tabel dept_categorized) ──
+  // Reference data, bukan data harian: tabelnya kecil (puluhan baris) dan
+  // tidak ikut siklus import bulanan, jadi diambil sekali saja waktu boot.
+  //
+  // Gagal ambil tidak dianggap fatal — yang memakainya cuma section Dept Card
+  // Perform di halaman Boneless, dan lebih baik section itu bilang kamusnya
+  // belum ada daripada seluruh app gagal boot karena satu tabel tambahan.
+  async function getDeptCategories() {
+    const { data, error } = await getClient()
+      .from('dept_categorized')
+      .select('mat, category');
+
+    if (error || !data) {
+      console.warn('[DB] dept_categorized tidak terbaca:', error && error.message);
+      return [];
+    }
+    return data;
+  }
+
+  // Upsert murni, tanpa delete lebih dulu. Tabelnya dipakai bersama semua dept
+  // dan tidak punya kolom dept, jadi tidak ada yang bisa dipakai membatasi
+  // penghapusan — mengosongkan tabel tiap import berarti file Cut Up nanti
+  // menghapus material Boneless. Konsekuensinya material yang dicoret dari
+  // xlsx tetap tinggal di tabel; membuangnya lewat Supabase, manual.
+  async function upsertDeptCategories(rows) {
+    const client = getClient();
+    const now = new Date().toISOString();
+    const payload = rows.map(r => ({
+      mat: r.mat, category: r.category, matdesc: r.matdesc || null, updated_at: now,
+    }));
+
+    // Dipotong supaya satu request tidak membengkak waktu kamusnya tumbuh
+    // mencakup dept lain.
+    const CHUNK = 500;
+    for (let i = 0; i < payload.length; i += CHUNK) {
+      const { error } = await client
+        .from('dept_categorized')
+        .upsert(payload.slice(i, i + CHUNK), { onConflict: 'mat' });
+      if (error) throw new Error(error.message);
+    }
+    return { saved: payload.length };
+  }
+
   async function getMeta(key) {
     if (key === 'months') return getMonths();
     if (key === 'lookups') return getLookups();
@@ -149,5 +192,8 @@ const DB = (() => {
     return { deleted: true };
   }
 
-  return { open, getClient, upsertByDate, loadAll, loadMonth, getMeta, setMeta, count, clearAll };
+  return {
+    open, getClient, upsertByDate, loadAll, loadMonth, getMeta, setMeta, count, clearAll,
+    getDeptCategories, upsertDeptCategories,
+  };
 })();

@@ -12,11 +12,19 @@
      kpiTitle,    judul chart yield
      kpiDepts,    dept yang dihitung yield-nya
      itemDepts,   dept yang item hasilnya masuk donut + tabel
+     cards,       OPSIONAL — section kartu kategori di kolom samping:
+                  { title, pv, defaultDept, deptOptions }
+                  deptOptions = [{ value, label, depts? }]; depts diisi cuma
+                  untuk entri gabungan seperti ALL BONELESS.
    }
 
    Dua daftar dept, bukan satu: pada Boneless yield cuma dihitung dari BONELESS
    BONGKAR (di situ karkas masuk jadi bahan), sementara donutnya menggabungkan
    hasil dari BONGKAR + MIX + GRAMASI. Pada Cut Up keduanya sama saja.
+
+   cfg.cards cuma diisi halaman Boneless. Halaman tanpa kunci itu tidak
+   merender pembungkus .cu-split sama sekali, jadi DOM-nya persis seperti
+   sebelum section ini ada.
 
    Id DOM dan class CSS-nya berawalan "cu" — sisa dari waktu file ini masih
    khusus Cut Up. Tidak diganti karena tidak pernah bentrok: satu halaman
@@ -95,6 +103,11 @@ function createDeptPage(cfg) {
     { value: 'AYAM PROSES', label: 'Ayam Proses' },
   ];
 
+  // Section kartu tidak menawarkan Ayam Proses: kartunya membandingkan hasil
+  // terhadap bahan yang masuk, dan itu cuma berarti kalau ayam di kedua sisi
+  // satu jenis. 'AYAM PROSES' di jalur hitung berarti "semua pv digabung".
+  const PV_CARD_OPTIONS = PV_OPTIONS.filter(o => o.value !== 'AYAM PROSES');
+
   // ── State per section ──
   // KPI dan chart punya filter sendiri-sendiri: mengubah tanggal di satu
   // section tidak menggeser yang lain, sama seperti Overview yang memisahkan
@@ -115,9 +128,30 @@ function createDeptPage(cfg) {
     chart: { key: 'chart', unit: 'kg', pv: 'AYAM PROSES', from: null, to: null, win: 0, depts: cfg.itemDepts },
   };
 
+  // Section kartu kategori cuma ada di halaman yang memintanya lewat cfg.cards
+  // — sekarang hanya Boneless. Berbeda dari dua section di atas, dept-nya
+  // dipilih user lewat dropdown, jadi s.depts berubah selagi halaman terbuka.
+  if (cfg.cards) {
+    SC.cards = {
+      key: 'cards', unit: 'kg', pv: cfg.cards.pv || 'AYAM BARU',
+      from: null, to: null, win: 0,
+      depts: deptsFor(cfg.cards.defaultDept),
+      dept: cfg.cards.defaultDept,
+    };
+  }
+
+  // Satu entri dropdown bisa menunjuk lebih dari satu dept: 'ALL BONELESS'
+  // menjumlah ketiga sub-deptnya. Nilai lain menunjuk dirinya sendiri.
+  function deptsFor(value) {
+    const opt = (cfg.cards && cfg.cards.deptOptions || []).find(o => o.value === value);
+    return (opt && opt.depts) || [value];
+  }
+
+  const sections = () => (cfg.cards ? [SC.kpi, SC.chart, SC.cards] : [SC.kpi, SC.chart]);
+
   let cuExpanded = false;
   let cuDetailOpen = false;   // tabel menggantikan donut
-  let cuCanvas = null, cuRo = null;
+  let cuCanvas = null, cuRo = null, catRo = null;
   let _kpiChart = null, _kpiActive = -1, _kpiPinned = false;
   // Skala sumbu kiri yang sedang berlaku. Dibaca afterBuildTicks, yang dipanggil
   // Chart.js dari dalam — tidak bisa lewat closure config, karena jalur update
@@ -128,6 +162,10 @@ function createDeptPage(cfg) {
   // berbeda, dan tanpa itu jawaban section yang satu terpakai oleh yang lain.
   let _datesCache = new Map(), _datesRawLen = -1;
   let _aggCache = new Map(), _aggRawLen = -1;
+  let _catCache = new Map(), _catRawLen = -1;
+  // Kartu yang sedang diangkat di kipas. Disimpan di luar render supaya
+  // pilihannya tidak hilang tiap section digambar ulang.
+  let _catActive = -1;
 
   const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
 
@@ -236,6 +274,75 @@ function createDeptPage(cfg) {
 
     const out = { bahanKg, hasilKg, bahanBrd, hasilBrd, items: [...map.values()] };
     _aggCache.set(key, out);
+    return out;
+  }
+
+  // Rincian HASIL per kategori produk, dengan BAHAN dept sebagai penyebutnya.
+  // Terpisah dari cuAggregate() karena identitas barisnya beda: di sini yang
+  // dipakai KODE material (r[3] → lookup mat), bukan deskripsinya (r[4]).
+  // Deskripsi dua SKU bisa berbeda-beda ejaannya, kodenya tidak.
+  //
+  // Kamus kategorinya datar dan tidak mengenal dept — dept yang dipilih user
+  // menyaring baris di sini, bukan kamusnya. Karena itu 'ALL BONELESS' tidak
+  // butuh jalur sendiri: ia cuma daftar dept yang lebih panjang.
+  //
+  // Yang tidak ketemu di kamus tidak dibuang diam-diam tapi dijumlah sendiri:
+  // kalau format kodenya ternyata tidak cocok, angkanya muncul sebagai
+  // peringatan di bawah kartu, bukan sebagai kartu yang diam-diam kekecilan.
+  function catAggregate(dateArr, pv, depts) {
+    const raw = Engine.getRawDB();
+    if (_catRawLen !== raw.length) { _catCache = new Map(); _catRawLen = raw.length; }
+    // Versi kamus ikut jadi kunci: hasil lama tidak berlaku lagi begitu
+    // kamusnya di-import ulang, dan panjang RAW_DB tidak berubah waktu itu.
+    const key = Engine.getDeptCategoriesVersion() + '|' + depts.join('|') + '|' + pv + '|' + dateArr.join(',');
+    const hit = _catCache.get(key);
+    if (hit) return hit;
+
+    const L = Engine.getLookups();
+    const catOf = Engine.getCatByMatIndex();
+    const dIdx = deptIdx(depts);
+    const hI = L.mvt.indexOf('HASIL');
+    const bI = L.mvt.indexOf('BAHAN');
+    // Penyebutnya persis penyebut yield di chart atas: BAHAN dept ini, tanpa
+    // sloc PACKAGING. Jadi jumlah seluruh kategori = yield yang sama.
+    const packI = L.sloc.indexOf('PACKAGING');
+    const pvAll = pv === 'AYAM PROSES';
+    const pI = pvAll ? -1 : L.pv.indexOf(pv);
+    // Penggabungan kategori dikerjakan di sini, bukan di kamusnya: isi tabel
+    // tetap sama persis dengan file sumbernya, dan pasangan mana yang dibaca
+    // jadi satu kartu bisa diubah lewat config tanpa import ulang.
+    const merge = (cfg.cards && cfg.cards.merge) || {};
+
+    let bahanKg = 0, hasilKg = 0, lainKg = 0;
+    const map = new Map();
+
+    if (dIdx.size && (pvAll || pI !== -1)) {
+      const rows = Engine.getRowsForDates(dateArr);
+      for (let i = 0; i < rows.length; i++) {
+        const r = rows[i];
+        if (!dIdx.has(r[0])) continue;
+        if (!pvAll && r[1] !== pI) continue;
+        if (r[5] === bI) {
+          if (r[9] === packI) continue;
+          bahanKg += r[7];
+          continue;
+        }
+        if (r[5] !== hI) continue;
+        hasilKg += r[7];
+        const raw = catOf[r[3]];
+        if (!raw) { lainKg += r[7]; continue; }
+        const cat = merge[raw] || raw;
+        map.set(cat, (map.get(cat) || 0) + r[7]);
+      }
+    }
+
+    // Urut menurun — itu urutan kartunya di kipas, yang terbesar paling kiri.
+    const cats = [...map.entries()]
+      .map(([name, kg]) => ({ name, kg, pct: bahanKg ? (kg / bahanKg) * 100 : 0 }))
+      .sort((a, b) => b.kg - a.kg);
+
+    const out = { bahanKg, hasilKg, lainKg, cats };
+    _catCache.set(key, out);
     return out;
   }
 
@@ -354,7 +461,11 @@ function createDeptPage(cfg) {
 
   // withUnit false untuk section KPI: sumbu kirinya memang kg, dan yield selalu
   // berbasis kg, jadi toggle BRD/KG di situ tidak berarti apa-apa.
-  function controlsHtml(s, withUnit) {
+  //
+  // opts.deptOptions mengisi pemilih dept — cuma section kartu yang punya,
+  // karena cuma di situ dept-nya dipilih user alih-alih dipatok config.
+  function controlsHtml(s, withUnit, opts) {
+    const o = opts || {};
     return `
       <div class="section-header cu-header">
         <div class="section-header-controls cu-controls">
@@ -363,6 +474,7 @@ function createDeptPage(cfg) {
             <button class="toggle-btn" data-metric="brd">BRD</button>
             <button class="toggle-btn" data-metric="kg">KG</button>
           </div>` : ''}
+          ${o.deptOptions ? `<div id="${eid(s, 'DeptWrap')}"></div>` : ''}
           <div id="${eid(s, 'PvWrap')}"></div>
           <div class="spacer"></div>
           <div id="${eid(s, 'RangeNav')}"></div>
@@ -370,7 +482,8 @@ function createDeptPage(cfg) {
       </div>`;
   }
 
-  function bindControls(s, onChange) {
+  function bindControls(s, onChange, opts) {
+    const o = opts || {};
     const toggle = el(s, 'MetricToggle');
     if (toggle) toggle.querySelectorAll('.toggle-btn').forEach(btn => {
       btn.classList.toggle('active', btn.dataset.metric === s.unit);
@@ -382,7 +495,22 @@ function createDeptPage(cfg) {
       });
     });
 
-    const pvSel = DatePicker.createCustomSelect(PV_OPTIONS, s.pv, val => {
+    // Dept diganti berarti hari produksinya bisa berbeda: rentang yang sedang
+    // dipegang belum tentu punya baris di dept yang baru. Dikembalikan ke
+    // default kalau begitu, alasan yang sama dengan pemeriksaan di render().
+    const deptWrap = el(s, 'DeptWrap');
+    if (deptWrap && o.deptOptions) {
+      const deptSel = DatePicker.createCustomSelect(o.deptOptions, s.dept, val => {
+        s.dept = val;
+        s.depts = deptsFor(val);
+        const dates = cuAllDates(s.depts);
+        if (s.from && s.to && !dates.some(d => d >= s.from && d <= s.to)) { s.from = null; s.to = null; }
+        onChange();
+      });
+      deptWrap.appendChild(deptSel.el);
+    }
+
+    const pvSel = DatePicker.createCustomSelect(o.pvOptions || PV_OPTIONS, s.pv, val => {
       s.pv = val;
       onChange();
     });
@@ -397,7 +525,7 @@ function createDeptPage(cfg) {
     // baru; kembalikan ke default daripada menampilkan halaman kosong. Diperiksa
     // per section: keduanya bisa membaca dept yang berbeda, jadi hari produksinya
     // pun tidak selalu sama.
-    [SC.kpi, SC.chart].forEach(s => {
+    sections().forEach(s => {
       const dates = cuAllDates(s.depts);
       if (s.from && s.to && !dates.some(d => d >= s.from && d <= s.to)) { s.from = null; s.to = null; }
     });
@@ -405,6 +533,20 @@ function createDeptPage(cfg) {
 
     container.innerHTML = `
       <div class="page-title">${esc(cfg.pageTitle)}</div>
+
+      ${cfg.cards ? `<div class="cu-split">
+      <div class="cu-split-side">
+        <div class="section" id="cuCardSection">
+          ${controlsHtml(SC.cards, false, { deptOptions: cfg.cards.deptOptions, pvOptions: PV_CARD_OPTIONS })}
+          <div class="cu-body">
+            <div class="cu-card-title cu-kpi-title">${esc(cfg.cards.title)}</div>
+            <div class="dc-stack" id="cuCatStack"></div>
+            <div class="cu-kpi-note" id="cuCatNote"></div>
+            <div class="cu-empty" id="cuCatEmpty">Tidak ada data untuk periode ini</div>
+          </div>
+        </div>
+      </div>
+      <div class="cu-split-main">` : ''}
 
       <div class="section" id="cuKpiSection">
         ${controlsHtml(SC.kpi, false)}
@@ -461,10 +603,17 @@ function createDeptPage(cfg) {
           </div>
         </div>
       </div>
+
+      ${cfg.cards ? `</div></div>` : ''}
     `;
 
     bindControls(SC.kpi, refreshKpi);
     bindControls(SC.chart, refreshChart);
+    if (cfg.cards) {
+      bindControls(SC.cards, refreshCats, {
+        deptOptions: cfg.cards.deptOptions, pvOptions: PV_CARD_OPTIONS,
+      });
+    }
 
     document.getElementById('cuMoreBtn').addEventListener('click', () => {
       cuExpanded = !cuExpanded;
@@ -485,8 +634,22 @@ function createDeptPage(cfg) {
     cuRo = new ResizeObserver(() => requestAnimationFrame(drawDonut));
     cuRo.observe(document.getElementById('cuDonutWrap'));
 
+    // Kipasnya dihitung ulang tiap kolomnya berubah lebar — termasuk waktu
+    // layoutnya berpindah dari dua kolom ke menumpuk di 1100px, di mana
+    // lebar yang tersedia melonjak.
+    if (cfg.cards) {
+      const stack = document.getElementById('cuCatStack');
+      if (stack) {
+        catRo = new ResizeObserver(() => requestAnimationFrame(() => {
+          fitFan(stack, stack.children.length);
+        }));
+        catRo.observe(stack);
+      }
+    }
+
     refreshKpi();
     refreshChart();
+    if (cfg.cards) refreshCats();
   }
 
   function refreshKpi() {
@@ -498,6 +661,11 @@ function createDeptPage(cfg) {
     renderRangeNav(SC.chart, refreshChart);
     renderTable();
     drawDonut();
+  }
+
+  function refreshCats() {
+    renderRangeNav(SC.cards, refreshCats);
+    renderCatCards();
   }
 
   function applyDetailState() {
@@ -518,6 +686,7 @@ function createDeptPage(cfg) {
   function destroy() {
     closeRangePicker();
     if (cuRo) { cuRo.disconnect(); cuRo = null; }
+    if (catRo) { catRo.disconnect(); catRo = null; }
     cuCanvas = null;
     destroyKpiChart();
   }
@@ -1052,6 +1221,161 @@ function createDeptPage(cfg) {
         },
       },
     };
+  }
+
+  // ═══════════════════════════════════════
+  //  KARTU KATEGORI (DEPT CARD PERFORM)
+  // ═══════════════════════════════════════
+
+  // Kartu kategori disusun sebagai kipas: tiap kartu menutupi sisi kanan kartu
+  // sebelumnya, dibaca kiri ke kanan, yang terbesar paling kiri. Dalam keadaan
+  // diam yang terlihat cuma sebilah nama; kartu yang disorot terangkat penuh
+  // dan mendorong tetangga kanannya, jadi yang terbaca tidak pernah terpotong.
+  //
+  // HTML, bukan kanvas: isinya cuma teks, dan sebagai flex biasa ia ikut
+  // menyesuaikan diri saat kolomnya menyempit di layar kecil.
+  // Jarak antar kartu dihitung, bukan dipatok. Satu angka tetap tidak bisa
+  // benar di dua tempat sekaligus: kolomnya cuma memuat ~470px di 1100px tapi
+  // hampir 900px di 1920px, dan jumlah kategorinya sendiri berubah menurut
+  // dept yang dipilih. Dipatok, kipasnya kalau tidak terpotong ya menyisakan
+  // kolom setengah kosong.
+  //
+  // Lebar kipasnya karena itu selalu pas selebar kolomnya — dan karena tidak
+  // pernah melebihi kolom, tidak ada scrollbar yang perlu dimunculkan.
+  // Lebar kartu maupun tumpangannya diurus CSS sepenuhnya (flex:1 1 0 +
+  // --dc-overlap), jadi yang tersisa di sini cuma satu hal yang tidak bisa
+  // dihitung CSS: lebar BILAH yang terlihat saat kartunya diam, karena itu
+  // bergantung pada jumlah kategori.
+  //
+  //   a = (W − ov) / n
+  //
+  // Dipakai untuk menyetel ukuran label persen di pojok kiri bawah — di
+  // kolom sempit bilahnya cuma ~27px dan angka seukuran penuh tidak muat.
+  function fitFan(stack, n) {
+    if (!stack || n < 1) return;
+    const avail = stack.clientWidth;
+    if (!avail) return;
+    const ov = parseFloat(getComputedStyle(stack).getPropertyValue('--dc-overlap')) || 0;
+    const advance = n < 2 ? avail : Math.max(0, (avail - ov) / n);
+    stack.style.setProperty('--dc-advance', advance + 'px');
+  }
+
+  function renderCatCards() {
+    const stack = document.getElementById('cuCatStack');
+    const note = document.getElementById('cuCatNote');
+    const empty = document.getElementById('cuCatEmpty');
+    if (!stack || !empty) return;
+
+    const s = SC.cards;
+    const agg = catAggregate(rangeDates(s), s.pv, s.depts);
+    const hasData = agg.cats.length > 0;
+
+    stack.style.display = hasData ? '' : 'none';
+    empty.style.display = hasData ? 'none' : 'block';
+    // Kamusnya sendiri yang belum ada, bukan datanya — bedakan, kalau tidak
+    // orang mencari-cari data produksi yang sebenarnya ada.
+    empty.textContent = Engine.hasDeptCategories()
+      ? 'Tidak ada data untuk periode ini'
+      : 'Kamus kategori material belum di-import';
+
+    // Susunan memusat, bukan menurun dari kiri: yang terbesar duduk di tengah,
+    // lalu makin ke tepi makin kecil ke dua arah. agg.cats sudah urut menurun,
+    // jadi tinggal dibagikan berselang-seling — yang ganjil ke kanan, yang
+    // genap ke kiri.
+    const arranged = [];
+    let centerPos = 0;
+    agg.cats.forEach((c, i) => {
+      if (i > 0 && i % 2 === 0) { arranged.unshift(c); centerPos++; }
+      else arranged.push(c);
+    });
+
+    // Yang menentukan sisi mana yang tertutup itu z-index, bukan marginnya —
+    // margin negatifnya seragam ke kiri seperti sebelumnya. z naik menuju
+    // tengah, jadi:
+    //   kiri tengah  kartu kanannya di atas -> yang tersisa bilah KIRI
+    //   kanan tengah kartu kirinya di atas  -> yang tersisa bilah KANAN
+    // Karena itu labelnya ikut berpindah sisi, mengikuti bilah yang terlihat.
+    const n = arranged.length;
+
+    // Kartu terbesar terangkat sejak awal — itu yang paling ingin dibaca, dan
+    // di tengah ia memang sudah paling atas.
+    _catActive = centerPos;
+
+    // Kartunya digambar polos; puncak tumpukan, sisi label, dan kartu yang
+    // terangkat semuanya dipasang applyShape() di bawah — satu tempat, supaya
+    // ketiganya tidak bisa saling bertentangan.
+    stack.innerHTML = arranged.map((c, i) => `
+      <div class="dc-card" data-i="${i}" tabindex="0" role="button"
+           aria-label="${esc(c.name)} ${esc(fmtPct(c.pct, 2))}">
+        <div class="dc-card-name">${esc(c.name)}</div>
+        <div class="dc-card-val">${esc(fmtPct(c.pct, 2))}</div>
+      </div>`).join('');
+
+    // Sentuh tidak pernah memicu :hover, jadi kartunya juga bisa diangkat
+    // dengan klik/tap. Satu saja yang terangkat: klik kartu lain memindahkan
+    // angkatannya, klik kartu yang sama menurunkannya kembali.
+    fitFan(stack, n);
+
+    // Yang terangkat SELALU tepat satu, dan dikendalikan satu class saja —
+    // bukan .is-active untuk kartu tengah ditambah :hover untuk yang disorot.
+    // Dua jalur itu bisa menyala berbarengan, dan dua kartu terangkat
+    // sekaligus bukan yang dimaksud.
+    //
+    // Kartu terbesar cuma nilai DEFAULT-nya: menyorot kartu lain memindahkan
+    // angkatan ke situ (yang tengah ikut menutup), dan begitu kursornya
+    // meninggalkan kipas, angkatannya kembali ke kartu terbesar.
+    const cards = [...stack.querySelectorAll('.dc-card')];
+
+    // Puncak tumpukan mengikuti kartu yang sedang terbuka, tidak dipatok di
+    // tengah. Dipatok, kartu terbesar tidak pernah ikut tertutup: z-nya tetap
+    // tertinggi, jadi ia terus tampil selebar penuh walau angkatannya sudah
+    // pindah — terlihat seperti dua kartu terbuka sekaligus.
+    //
+    // Sisi label ikut dihitung ulang terhadap puncak yang sama: yang di kiri
+    // puncak tertutup dari kanan (bilah KIRI), yang di kanan tertutup dari
+    // kiri (bilah KANAN). Kalau sisinya dipatok sementara puncaknya berpindah,
+    // label sebagian kartu justru bersembunyi di balik tetangganya.
+    const applyShape = (peak) => {
+      cards.forEach((c, j) => {
+        c.style.setProperty('--dc-z', n - Math.abs(j - peak));
+        c.classList.toggle('is-left', j < peak);
+        c.classList.toggle('is-right', j > peak);
+        c.classList.toggle('is-active', j === peak);
+      });
+    };
+
+    const lift = (i) => { _catActive = i; applyShape(i); };
+    lift(centerPos);
+
+    cards.forEach((card, i) => {
+      // mouseenter, bukan mouseover: yang kedua ikut menyala lagi tiap kursor
+      // berpindah antar anak elemen di dalam kartu yang sama.
+      card.addEventListener('mouseenter', () => lift(i));
+      // Sentuh tidak pernah memicu mouseenter, jadi tap dilayani terpisah.
+      card.addEventListener('click', () => lift(i));
+      card.addEventListener('focus', () => lift(i));
+    });
+
+    // mouseleave pada wadahnya, bukan pada tiap kartu: berpindah antar kartu
+    // tidak keluar dari kipas, jadi angkatannya tidak berkedip di tengah.
+    stack.addEventListener('mouseleave', () => lift(centerPos));
+    stack.addEventListener('focusout', (e) => {
+      if (!stack.contains(e.relatedTarget)) lift(centerPos);
+    });
+
+    if (!note) return;
+    if (!hasData) { note.textContent = ''; return; }
+
+    // Dua angka penutup: berapa yang terbaca sebagai kategori, dan berapa yang
+    // tidak. Yang kedua penjaga kalau kode material di kamus ternyata tidak
+    // sama bentuknya dengan yang ada di data produksi — tanpa itu selisihnya
+    // cuma tampak sebagai kartu-kartu yang diam-diam kekecilan.
+    const total = agg.cats.reduce((a, c) => a + c.pct, 0);
+    const lainPct = agg.bahanKg ? (agg.lainKg / agg.bahanKg) * 100 : 0;
+    note.textContent = agg.cats.length + ' kategori · total ' + fmtPct(total, 2)
+      + (agg.lainKg > 0
+        ? ' · ' + fmtNum(agg.lainKg) + ' kg (' + fmtPct(lainPct, 2) + ') tanpa kategori'
+        : '');
   }
 
   // ═══════════════════════════════════════
