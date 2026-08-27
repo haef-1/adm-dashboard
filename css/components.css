@@ -3286,10 +3286,9 @@
    yang dipaku (sticky), jadi warnanya tetap utuh saat kolom jam lewat di
    belakangnya. */
 .traffic-detail-table thead th {
-  /* Satu tingkat di antara --pink-light dan --pink: cukup pekat untuk
-     terbaca sebagai pink, teksnya ikut digelapkan ke --text-mid supaya
-     kontrasnya tetap aman untuk huruf 10px. */
-  background: #fbcfe8;
+  /* Teksnya digelapkan ke --text-mid supaya kontrasnya tetap aman untuk huruf
+     10px di atas latar pink itu. */
+  background: var(--pink-head);
   color: var(--text-mid);
   font-weight: 700;
   text-transform: uppercase;
@@ -3717,8 +3716,12 @@
 }
 
 .cu-table th {
-  background: var(--surface-alt);
-  color: var(--text-soft);
+  /* Latar pink yang sama dengan tabel detail Trafic Bahan Karkas, lewat token
+     yang sama pula — .cu-table cuma dipakai dua tabel "Detail data" di halaman
+     dept (item 5 Top Produk dan matriks kategori), jadi keduanya seragam dari
+     satu aturan ini. Teksnya --text-mid supaya kontrasnya aman di atas pink. */
+  background: var(--pink-head);
+  color: var(--text-mid);
   font-size: 11px;
   font-weight: 700;
   text-align: left;
@@ -3789,6 +3792,58 @@
 
 .cu-num-qty { min-width: 9ch; }
 .cu-num-pct { min-width: 6ch; }
+
+/* ── Header tabel item yang menempel ──
+   Waktu daftarnya dibentangkan ("lihat semua item"), tabelnya jauh lebih
+   panjang dari layar dan judul kolomnya hilang di atas. thead-nya dipaku
+   supaya berhenti tepat di bawah topbar.
+
+   top:0, BUKAN 52px setinggi topbar: yang menggulung itu .page-content, dan
+   kotak itu dimulai persis di bawah topbar — topbar saudaranya di atas, bukan
+   yang menimpanya. Jadi tepi atas .page-content sudah sama dengan tepi bawah
+   topbar. */
+#cuTable thead th {
+  position: sticky;
+  top: 0;
+  /* Di atas sel badan yang lewat di belakangnya. Latarnya sudah pekat
+     (--pink-head), jadi tidak ada yang membayang menembus. */
+  z-index: 3;
+}
+
+/* Dua penghalang di bawah harus dilepas, kalau tidak aturan di atas tidak
+   berbuat apa-apa: sticky SELALU diukur terhadap kotak geser terdekat, dan
+   overflow apa pun selain visible/clip menjadikan sebuah elemen kotak geser —
+   walau ia tidak pernah benar-benar menggulung. Diukur terhadap kotak yang
+   diam, headernya ikut diam bersama tabelnya.
+
+   Penghalang 1: .section semula overflow:hidden. clip memotong persis sama —
+   sudut membulatnya tetap rapi — bedanya ia tidak membuat kotak geser, jadi
+   sticky di dalamnya kembali diukur terhadap .page-content. Sengaja cuma
+   section ini yang diubah: .section dipakai seluruh aplikasi, dan tabel lain
+   seperti .data-table justru mengandalkan headernya menempel pada pembungkus
+   sendiri, bukan pada halaman. */
+#cuChartSection {
+  overflow: clip;
+}
+
+/* Penghalang 2: pembungkus tabelnya. overflow-x:auto saja sudah cukup untuk
+   menjadikannya kotak geser di KEDUA sumbu — overflow-y:visible ikut dipaksa
+   jadi auto begitu sumbu satunya bukan visible — jadi ia harus benar-benar
+   visible. Aman karena #cuTable di bawah dipatok table-layout:fixed dan tidak
+   akan pernah melebihi kolomnya. Matriks kategori tidak ikut: ia memang harus
+   bisa digeser mendatar, dan pembungkusnya ada di #cuCatDetail. */
+#cuDetail .cu-table-wrap {
+  overflow: visible;
+}
+
+/* Lebar kolom dipatok supaya tabelnya selalu muat. Nama item yang panjang
+   dipotong elipsis di dalam selnya — .cu-td-name sudah overflow:hidden —
+   bukan mendorong tabel melebar. Tanpa ini satu nama panjang saja sudah
+   membuat tabelnya melewati kolom, dan pembungkus yang visible itu cuma
+   memotongnya tanpa memberi jalan untuk menggeser. */
+#cuTable { table-layout: fixed; }
+#cuTable th:nth-child(3) { width: 28%; }
+#cuTable th:nth-child(4) { width: 24%; }
 
 .cu-td-empty {
   padding: 32px 10px;
@@ -3887,6 +3942,155 @@
     max-width: none;
   }
 }
+
+/* Kepala section yang isinya langsung di .cu-body — kipas kategori dan chart
+   KPI: judul di kiri, tombol detail di kanan. Sengaja BUKAN .cu-card-head —
+   kelas itu membawa padding mendatar 20px sendiri untuk kartu donut yang
+   .cu-body-nya tanpa padding, sementara di kedua section ini padding 20px-nya
+   sudah datang dari .cu-body. Dipakai ulang, jaraknya jadi 40px. */
+.dc-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+/* Tombol Export + Detail data dibungkus jadi satu kelompok, bukan dibiarkan
+   jadi dua anak flex terpisah: dengan space-between, tiga anak akan tersebar
+   ke kiri-tengah-kanan dan tombol Export mengambang di tengah kepala. */
+.dc-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+/* WAJIB. Atribut hidden bekerja lewat `[hidden] { display: none }` di
+   stylesheet bawaan browser, dan aturan itu KALAH dari .table-export-btn yang
+   display:flex — tombolnya akan tetap terlihat walau sudah ditandai hidden. */
+.dc-export-btn[hidden] {
+  display: none;
+}
+
+/* Tombol export di Overview berdiri sendiri di barisnya; di sini ia berdampingan
+   dengan tombol Detail data yang jauh lebih pendek. Tingginya disamakan supaya
+   keduanya tidak terbaca sebagai dua kelompok yang berbeda. */
+.dc-head-actions .dc-export-btn {
+  width: 26px;
+  height: 26px;
+}
+
+/* ── Matriks kategori × tanggal ──
+   Selalu lebih lebar dari kolomnya begitu rentangnya lebih dari beberapa hari,
+   jadi ia digeser mendatar di dalam .cu-table-wrap. width:auto, bukan 100%
+   warisan .cu-table: dipaksa 100% kolomnya justru saling menggencet sampai
+   angkanya terlipat, bukan memunculkan geseran. */
+.dc-matrix {
+  width: auto;
+  min-width: 100%;
+}
+
+/* Garis pembatas antar kolom. Ditulis sebagai border KANAN tiap sel lalu
+   dicabut di sel terakhir — bukan border kiri — supaya tidak ada garis yang
+   menempel di tepi luar tabel. Di matriks selebar ini garis vertikalnya lebih
+   dari hiasan: tanpa itu deretan angka yang seragam gampang terbaca meleset
+   satu kolom waktu tabelnya digeser. */
+.dc-matrix th,
+.dc-matrix td {
+  border-right: 1px solid var(--border-light);
+}
+
+.dc-matrix th:last-child,
+.dc-matrix td:last-child {
+  border-right: none;
+}
+
+/* Tanggalnya di tengah kolomnya, setegak lurus dengan kotak angka di
+   bawahnya — .cu-num sebenarnya sudah center, tapi `.cu-table th` yang
+   text-align:left menang tipis dari sisi kekhususan selektor, jadi harus
+   ditulis ulang dengan selektor yang lebih khusus, bukan dihapus dari sana
+   (header tabel item di bawah memang rata kiri). */
+.dc-matrix th.cu-num {
+  text-align: center;
+}
+
+/* Kolom kategori ikut menempel waktu tabelnya digeser — tanpa itu, begitu
+   digeser beberapa kolom, angka yang terlihat tidak lagi diketahui barisnya. */
+.dc-th-cat,
+.dc-td-cat {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  /* Latar pekat wajib: sticky cuma memindahkan cat, jadi kolom yang lewat di
+     belakangnya akan terbaca menembus kalau latarnya bening. Ditulis di sel
+     BADAN saja — sudut "Kategori" di header sudah dapat latar pink dari
+     .cu-table th, dan menimpanya di sini justru melubangi barisan pink itu. */
+  /* Pembatasnya box-shadow, bukan border seperti kolom lain. Pada tabel
+     border-collapse:collapse garisnya milik TABEL, bukan selnya — jadi border
+     kanan di sel yang sticky ikut tergulung bersama kolom lain dan kolom
+     kategori kehilangan tepinya persis waktu tepi itu paling dibutuhkan.
+     box-shadow dicat bersama selnya, jadi ia ikut menempel. Sedikit lebih
+     tegas dari garis antar kolom: ini batas antara nama dan angka. */
+  border-right: none;
+  box-shadow: 1px 0 0 var(--border);
+  max-width: 132px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dc-td-cat {
+  background: var(--surface);
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* Header duduk di atas sel biasa yang lewat di bawahnya. */
+.dc-th-cat { z-index: 2; }
+
+/* Kolom rata-rata: dipaku di tepi kanan seperti kolom Total di tabel detail
+   Trafic Bahan Karkas. Matriksnya digeser mendatar, dan angka rangkuman itu
+   justru yang paling sering dicari — kalau ikut tergulung, ia baru terlihat
+   setelah menggeser sampai ujung. Latarnya wajib pekat dengan alasan yang
+   sama seperti kolom kategori, dan sekatnya box-shadow — bukan border —
+   karena pada border-collapse:collapse border milik tabel, bukan selnya, jadi
+   ia tidak ikut menempel. */
+.dc-matrix .dc-avg {
+  position: sticky;
+  right: 0;
+  z-index: 1;
+  border-right: none;
+  box-shadow: -1px 0 0 var(--border);
+}
+
+/* Latar pekat dan penebalan angkanya cuma untuk sel BADAN. Ditulis di aturan
+   bersama di atas, `.dc-matrix .dc-avg` (dua kelas) mengalahkan `.cu-table th`
+   (satu kelas + satu elemen) dari sisi kekhususan — dan kepala kolomnya
+   kehilangan latar pink yang dipakai seluruh header. */
+.dc-matrix td.dc-avg {
+  background: var(--surface);
+  font-weight: 700;
+  color: var(--text);
+}
+
+/* Kepalanya ikut pink dari .cu-table th; yang perlu ditimpa cuma z-index-nya,
+   supaya ia lewat di atas sel badan yang tergulung di belakangnya. */
+.dc-matrix thead .dc-avg {
+  z-index: 2;
+}
+
+/* Pemisah antara blok kg (Bahan/Hasil/Selisih) dan blok persen (Yield/Waste)
+   di tabel detail Yield. Keduanya membaca hari yang sama tapi satuannya
+   berbeda; tanpa garis ini kelimanya terbaca sebagai satu deret angka yang
+   sebanding. Garisnya di baris terakhir blok atas, bukan baris pertama blok
+   bawah — supaya tidak dobel dengan border-bottom sel yang sudah ada. */
+.dc-row-sep td {
+  border-bottom: 1px solid var(--border);
+}
+
+/* Kategori yang tidak diproduksi hari itu: strip, bukan 0,00%. Dibuat samar
+   supaya matanya lewat begitu saja dan yang menonjol tinggal angka. */
+.dc-nil { color: var(--text-muted); }
 
 /* ── Kipas kartu kategori (Dept Card Perform) ──
    Tiap kartu menutupi sisi kanan kartu sebelumnya. z-index naik ke kanan,
@@ -4193,6 +4397,26 @@
     padding-left: 14px;
     padding-right: 14px;
   }
+
+  /* Kedua tabel detail — matriks kategori dan Yield/Waste — diberi jarak tepi
+     yang jauh lebih tipis dari isi section lainnya: di layar selebar 360px,
+     14px di dua sisi itu berarti dua kolom tanggal lagi yang harus dicari
+     dengan menggeser. Tidak dirapatkan sampai
+     nol — tabel yang menempel garis section terbaca seperti terpotong, bukan
+     seperti bisa digeser.
+     Margin negatifnya dihitung terhadap padding .cu-body di breakpoint ini:
+     14px − 8px menyisakan 6px. Kalau padding itu diubah, angka ini ikut.
+     Selektor id-nya sekaligus mengalahkan padding 12px yang dipasang blok
+     420px di bawah untuk .cu-detail, jadi jaraknya tetap 6px di layar
+     terkecil sekalipun. Yang dilepas cuma kedua tabel ini: judul, tombol,
+     chart, dan kipasnya tetap sebaris dengan isi section yang lain. */
+  #cuCatDetail,
+  #cuKpiDetail {
+    padding-left: 0;
+    padding-right: 0;
+    margin-left: -8px;
+    margin-right: -8px;
+  }
 }
 
 /* Tabel detail di layar ponsel: harus muat utuh tanpa geser horizontal.
@@ -4202,8 +4426,16 @@
    bukan mendorong tabel melebihi kartu. */
 @media (max-width: 600px) {
   .cu-table {
-    table-layout: fixed;
     font-size: 11px;
+  }
+
+  /* Matriks kategori dikecualikan dari dua aturan lebar di bawah: ia memang
+     harus lebih lebar dari layarnya lalu digeser mendatar. table-layout:fixed
+     pada tabel yang lebarnya auto membuat lebar kolomnya ditebak dari baris
+     header saja, dan "40vw untuk kolom kedua" akan mengunci kolom TANGGAL
+     pertama selebar itu. */
+  .cu-table:not(.dc-matrix) {
+    table-layout: fixed;
   }
 
   .cu-table th {
@@ -4219,7 +4451,7 @@
 
   .cu-th-no { width: 22px; }
 
-  .cu-table th:nth-child(2),
+  .cu-table:not(.dc-matrix) th:nth-child(2),
   .cu-td-name { width: 40vw; }
 
   .cu-num {

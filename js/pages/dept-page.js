@@ -151,6 +151,8 @@ function createDeptPage(cfg) {
 
   let cuExpanded = false;
   let cuDetailOpen = false;   // tabel menggantikan donut
+  let cuCatDetailOpen = false;   // matriks kategori × tanggal menggantikan kipas
+  let cuKpiDetailOpen = false;   // tabel Yield/Waste menggantikan chart KPI
   let cuCanvas = null, cuRo = null, catRo = null;
   let _kpiChart = null, _kpiActive = -1, _kpiPinned = false;
   // Skala sumbu kiri yang sedang berlaku. Dibaca afterBuildTicks, yang dipanggil
@@ -548,9 +550,27 @@ function createDeptPage(cfg) {
         <div class="section" id="cuCardSection">
           ${controlsHtml(SC.cards, false, { deptOptions: cfg.cards.deptOptions, pvOptions: PV_CARD_OPTIONS })}
           <div class="cu-body">
-            <div class="cu-card-title cu-kpi-title">${esc(cfg.cards.title)}</div>
+            <div class="dc-head">
+              <div class="cu-card-title cu-kpi-title">${esc(cfg.cards.title)}</div>
+              <div class="dc-head-actions">
+                ${exportBtnHtml('cuCatExportBtn')}
+                <button type="button" class="traffic-detail-btn" id="cuCatDetailBtn" aria-expanded="false">
+                  <span class="traffic-detail-sign" id="cuCatDetailSign" aria-hidden="true">+</span>
+                  <span id="cuCatDetailLabel">Detail data</span>
+                </button>
+              </div>
+            </div>
             <div class="dc-stack" id="cuCatStack"></div>
             <div class="cu-empty" id="cuCatEmpty">Tidak ada data untuk periode ini</div>
+
+            <!-- Matriks kategori × tanggal. Menggantikan kipas saat "Detail
+                 data" ditekan — filter di header section tetap yang sama,
+                 jadi keduanya selalu memotret rentang yang sama. -->
+            <div class="cu-detail" id="cuCatDetail" hidden>
+              <div class="cu-table-wrap">
+                <table class="cu-table dc-matrix" id="cuCatTable"></table>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -559,19 +579,48 @@ function createDeptPage(cfg) {
       <div class="section" id="cuKpiSection">
         ${controlsHtml(SC.kpi, false)}
         <div class="cu-body">
-          <div class="cu-card-title cu-kpi-title">${esc(cfg.kpiTitle)}</div>
-          <div class="cu-kpi-wrap" id="cuKpiWrap"><canvas id="cuKpiCanvas"></canvas></div>
-          <!-- Legend HTML, bukan legend bawaan Chart.js: tiga seri berarti
-               identitasnya tidak boleh bersandar pada warna saja. Satuan tiap
-               sumbu tidak ikut di sini — digambar di ujung atas garis
-               sumbunya masing-masing. -->
-          <div class="cu-kpi-legend">
-            <span class="cu-leg-key"><i style="background:${tint(KPI_COLORS.bahan, FILL_TINT)};border-color:${KPI_COLORS.bahan}"></i>Bahan</span>
-            <span class="cu-leg-key"><i style="background:${tint(KPI_COLORS.hasil, FILL_TINT)};border-color:${KPI_COLORS.hasil}"></i>Hasil</span>
-            <span class="cu-leg-key"><i class="dot" style="background:${KPI_COLORS.yield}"></i>Yield</span>
+          <div class="dc-head">
+            <div class="cu-card-title cu-kpi-title">${esc(cfg.kpiTitle)}</div>
+            <div class="dc-head-actions">
+              ${exportBtnHtml('cuKpiExportBtn')}
+              <button type="button" class="traffic-detail-btn" id="cuKpiDetailBtn" aria-expanded="false">
+                <span class="traffic-detail-sign" id="cuKpiDetailSign" aria-hidden="true">+</span>
+                <span id="cuKpiDetailLabel">Detail data</span>
+              </button>
+            </div>
           </div>
+
+          <!-- Dibungkus supaya mode detail cukup menyembunyikan satu elemen:
+               renderKpiChart menyetel display kanvas dan .cu-empty lewat style
+               inline, dan itu tidak bisa dikalahkan rule CSS — tapi induk yang
+               hidden membuatnya tidak relevan. Pola yang sama dengan
+               .cu-donut-view di kartu donut. -->
+          <div class="cu-kpi-view" id="cuKpiView">
+            <div class="cu-kpi-wrap" id="cuKpiWrap"><canvas id="cuKpiCanvas"></canvas></div>
+            <!-- Legend HTML, bukan legend bawaan Chart.js: tiga seri berarti
+                 identitasnya tidak boleh bersandar pada warna saja. Satuan tiap
+                 sumbu tidak ikut di sini — digambar di ujung atas garis
+                 sumbunya masing-masing. -->
+            <div class="cu-kpi-legend">
+              <span class="cu-leg-key"><i style="background:${tint(KPI_COLORS.bahan, FILL_TINT)};border-color:${KPI_COLORS.bahan}"></i>Bahan</span>
+              <span class="cu-leg-key"><i style="background:${tint(KPI_COLORS.hasil, FILL_TINT)};border-color:${KPI_COLORS.hasil}"></i>Hasil</span>
+              <span class="cu-leg-key"><i class="dot" style="background:${KPI_COLORS.yield}"></i>Yield</span>
+            </div>
+            <div class="cu-empty" id="cuKpiEmpty">Tidak ada data untuk periode ini</div>
+          </div>
+
+          <!-- Yield & Waste per tanggal. Rentang dan dept-nya sama persis
+               dengan chart di atasnya — termasuk batas 7 periode terakhir —
+               jadi tabelnya selalu memotret batang yang sama. -->
+          <div class="cu-detail" id="cuKpiDetail" hidden>
+            <div class="cu-table-wrap">
+              <table class="cu-table dc-matrix" id="cuKpiTable"></table>
+            </div>
+          </div>
+
+          <!-- Di luar .cu-kpi-view: keterangan "7 hari terakhir dari N" berlaku
+               untuk tabel maupun chart, jadi ia tidak ikut disembunyikan. -->
           <div class="cu-kpi-note" id="cuKpiNote"></div>
-          <div class="cu-empty" id="cuKpiEmpty">Tidak ada data untuk periode ini</div>
         </div>
       </div>
 
@@ -581,10 +630,13 @@ function createDeptPage(cfg) {
           <div class="cu-card" id="cuProdukCard">
             <div class="cu-card-head">
               <div class="cu-card-title" id="cuDonutTitle">5 Top Produk</div>
-              <button type="button" class="traffic-detail-btn" id="cuDetailBtn" aria-expanded="false">
-                <span class="traffic-detail-sign" id="cuDetailSign" aria-hidden="true">+</span>
-                <span id="cuDetailLabel">Detail data</span>
-              </button>
+              <div class="dc-head-actions">
+                ${exportBtnHtml('cuItemExportBtn')}
+                <button type="button" class="traffic-detail-btn" id="cuDetailBtn" aria-expanded="false">
+                  <span class="traffic-detail-sign" id="cuDetailSign" aria-hidden="true">+</span>
+                  <span id="cuDetailLabel">Detail data</span>
+                </button>
+              </div>
             </div>
 
             <!-- Dibungkus supaya mode detail cukup menyembunyikan satu elemen.
@@ -621,7 +673,20 @@ function createDeptPage(cfg) {
       bindControls(SC.cards, refreshCats, {
         deptOptions: cfg.cards.deptOptions, pvOptions: PV_CARD_OPTIONS,
       });
+      document.getElementById('cuCatDetailBtn').addEventListener('click', () => {
+        cuCatDetailOpen = !cuCatDetailOpen;
+        applyCatDetailState();
+      });
     }
+
+    document.getElementById('cuKpiDetailBtn').addEventListener('click', () => {
+      cuKpiDetailOpen = !cuKpiDetailOpen;
+      applyKpiDetailState();
+    });
+
+    bindExport('cuKpiExportBtn', () => _exportKpi);
+    bindExport('cuItemExportBtn', () => _exportItems);
+    if (cfg.cards) bindExport('cuCatExportBtn', () => _exportCats);
 
     document.getElementById('cuMoreBtn').addEventListener('click', () => {
       cuExpanded = !cuExpanded;
@@ -662,7 +727,39 @@ function createDeptPage(cfg) {
 
   function refreshKpi() {
     renderRangeNav(SC.kpi, refreshKpi);
-    renderKpiChart();
+    // Satu pintu seperti di section kartu: applyKpiDetailState yang memutuskan
+    // mana yang digambar, chart atau tabelnya — jadi ganti rentang selagi
+    // tabelnya terbuka ikut memperbarui tabel, bukan chart yang tak terlihat.
+    applyKpiDetailState();
+  }
+
+  function applyKpiDetailState() {
+    const btn = document.getElementById('cuKpiDetailBtn');
+    if (btn) {
+      btn.classList.toggle('is-open', cuKpiDetailOpen);
+      btn.setAttribute('aria-expanded', String(cuKpiDetailOpen));
+      const sign = document.getElementById('cuKpiDetailSign');
+      const label = document.getElementById('cuKpiDetailLabel');
+      if (sign) sign.textContent = cuKpiDetailOpen ? '−' : '+';
+      if (label) label.textContent = cuKpiDetailOpen ? 'Collapse data' : 'Detail data';
+    }
+    const view = document.getElementById('cuKpiView');
+    const detail = document.getElementById('cuKpiDetail');
+    if (view) view.hidden = cuKpiDetailOpen;
+    if (detail) detail.hidden = !cuKpiDetailOpen;
+    showExport('cuKpiExportBtn', cuKpiDetailOpen);
+
+    if (cuKpiDetailOpen) {
+      // Chart-nya dibuang, bukan sekadar disembunyikan. Chart.js mengukur
+      // kanvas dari kotak induknya, dan induk yang hidden lebarnya nol —
+      // update() berikutnya akan menyimpan ukuran nol itu dan chartnya kembali
+      // sebagai garis pipih waktu tabel ditutup. Menggambar ulang dari nol
+      // untuk 7 batang jauh lebih murah daripada menambal ukurannya.
+      destroyKpiChart();
+      renderKpiTable();
+    } else {
+      renderKpiChart();
+    }
   }
 
   function refreshChart() {
@@ -673,7 +770,34 @@ function createDeptPage(cfg) {
 
   function refreshCats() {
     renderRangeNav(SC.cards, refreshCats);
+    // Satu pintu: applyCatDetailState yang memutuskan mana yang digambar,
+    // kipas atau matriksnya. Dipanggil dari sini juga supaya waktu rentang
+    // atau dept diganti selagi tabelnya terbuka, yang ikut berubah tabelnya —
+    // bukan kipas yang sedang tidak terlihat.
+    applyCatDetailState();
+  }
+
+  function applyCatDetailState() {
+    const btn = document.getElementById('cuCatDetailBtn');
+    if (btn) {
+      btn.classList.toggle('is-open', cuCatDetailOpen);
+      btn.setAttribute('aria-expanded', String(cuCatDetailOpen));
+      const sign = document.getElementById('cuCatDetailSign');
+      const label = document.getElementById('cuCatDetailLabel');
+      if (sign) sign.textContent = cuCatDetailOpen ? '−' : '+';
+      if (label) label.textContent = cuCatDetailOpen ? 'Collapse data' : 'Detail data';
+    }
+    const detail = document.getElementById('cuCatDetail');
+    if (detail) detail.hidden = !cuCatDetailOpen;
+    showExport('cuCatExportBtn', cuCatDetailOpen);
+
+    // renderCatCards ikut dipanggil waktu tabelnya ditutup, bukan cuma
+    // di-display kembali: selagi tersembunyi lebar .dc-stack nol, dan fitFan
+    // keluar lebih awal pada lebar nol. Tanpa gambar ulang, kipas yang muncul
+    // lagi memakai jatah lebar dari perhitungan terakhir yang mungkin sudah
+    // basi (rentang atau dept-nya sudah berganti selagi tabelnya terbuka).
     renderCatCards();
+    if (cuCatDetailOpen) renderCatTable();
   }
 
   function applyDetailState() {
@@ -689,6 +813,7 @@ function createDeptPage(cfg) {
     document.getElementById('cuProdukCard')?.classList.toggle('detail-open', cuDetailOpen);
     const detail = document.getElementById('cuDetail');
     if (detail) detail.hidden = !cuDetailOpen;
+    showExport('cuItemExportBtn', cuDetailOpen);
   }
 
   function destroy() {
@@ -879,11 +1004,100 @@ function createDeptPage(cfg) {
     return sc;
   }
 
+  // Keterangan "menampilkan N hari terakhir dari M". Dipakai chart dan tabel
+  // detailnya sama-sama: batas KPI_BARS berlaku untuk keduanya, jadi catatan
+  // itu tidak boleh ikut hilang waktu chartnya diganti tabel.
+  function setKpiNote(shown, hidden) {
+    const note = document.getElementById('cuKpiNote');
+    if (!note) return;
+    note.textContent = hidden > 0
+      ? 'Menampilkan ' + shown + ' hari produksi terakhir dari ' + (shown + hidden) + ' hari terpilih'
+      : '';
+  }
+
+  // Yield dan Waste per tanggal — dua baris, kolomnya tanggal yang sama persis
+  // dengan batang di chart. Waste ditulis sebagai 100 − yield, bukan dihitung
+  // ulang dari (bahan − hasil): cuYield memotong ke bawah pada 2 desimal, jadi
+  // dihitung sendiri keduanya bisa berjumlah 99,99% atau 100,01% dan angka di
+  // tabel tidak lagi sama dengan titik yield yang digambar di chart.
+  function renderKpiTable() {
+    const table = document.getElementById('cuKpiTable');
+    if (!table) return;
+
+    const { points, hidden } = kpiSeries(SC.kpi);
+    setKpiNote(points.length, hidden);
+
+    if (!points.some(p => p.bahan > 0 || p.hasil > 0)) {
+      table.innerHTML = `<tbody><tr><td class="cu-td-empty">Tidak ada data untuk periode ini</td></tr></tbody>`;
+      _exportKpi = null;
+      return;
+    }
+
+    // Hari yang dept ini tidak berproduksi sama sekali bernilai null di SEMUA
+    // barisnya — nol kg dan yield 0% dua-duanya salah baca untuk hari yang
+    // datanya memang tidak ada.
+    const nil = (p) => p.bahan === 0 && p.hasil === 0;
+
+    // Satu daftar untuk kelima baris: nilainya dipakai menggambar tabel DAN
+    // dikirim ke Excel, jadi tidak ada dua jalur yang bisa berselisih. Satuan
+    // ditulis di nama metriknya karena kolomnya sudah dipakai tanggal — tiga
+    // baris pertama kg, dua terakhir persen.
+    const spec = [
+      { name: 'Bahan (kg)',   pct: false, of: p => p.bahan },
+      { name: 'Hasil (kg)',   pct: false, of: p => p.hasil },
+      // hasil − bahan, bukan sebaliknya: yang dicari memang berapa kg yang
+      // HILANG, jadi angkanya negatif dengan sendirinya — tidak perlu tanda
+      // minus yang ditempel belakangan. Kalau suatu hari hasilnya justru
+      // melebihi bahan, angkanya positif apa adanya; itu tanda data yang perlu
+      // dilihat, bukan yang perlu disamarkan.
+      { name: 'Selisih (kg)', pct: false, of: p => p.hasil - p.bahan, sep: true },
+      { name: 'Yield (%)',    pct: true,  of: p => p.yield },
+      { name: 'Waste (%)',    pct: true,  of: p => p.yield === null ? null : 100 - p.yield },
+    ];
+
+    const rows = spec.map(m => [
+      m.name,
+      ...points.map(p => {
+        if (nil(p)) return null;
+        const v = m.of(p);
+        return v === null ? null : (m.pct ? v : Math.round(v));
+      }),
+    ]);
+
+    table.innerHTML = `
+      <thead>
+        <tr>
+          <th class="dc-th-cat">Metrik</th>
+          ${points.map(p => `<th class="cu-num">${esc(p.label)}</th>`).join('')}
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map((r, i) => `<tr${spec[i].sep ? ' class="dc-row-sep"' : ''}>
+          <td class="dc-td-cat">${esc(r[0])}</td>
+          ${r.slice(1).map(v => `<td class="cu-num">${v === null
+            ? '<span class="dc-nil">–</span>'
+            : `<span class="cu-num-val ${spec[i].pct ? 'cu-num-pct' : 'cu-num-qty'}">${
+                spec[i].pct ? fmtPct(v, 2) : fmtNum(v)}</span>`}</td>`).join('')}
+        </tr>`).join('')}
+      </tbody>`;
+
+    // Jenis tiap baris diambil dari spec yang sama yang menggambar tabelnya,
+    // jadi baris yang di layar persen pasti persen juga di Excel.
+    const kinds = spec.map(m => (m.pct ? 'pct' : 'kg'));
+
+    _exportKpi = {
+      rows: [['Metrik', ...points.map(p => p.date)], ...rows],
+      kind: (r, c) => (c === 0 ? null : r === 0 ? 'date' : kinds[r - 1]),
+      cols: [{ wch: 14 }, ...points.map(() => ({ wch: 13 }))],
+      sheet: 'Yield',
+      file: cfg.pageTitle + ' - ' + cfg.kpiTitle + fileStamp(points.map(p => p.date)),
+    };
+  }
+
   function renderKpiChart() {
     const wrap = document.getElementById('cuKpiWrap');
     const canvas = document.getElementById('cuKpiCanvas');
     const empty = document.getElementById('cuKpiEmpty');
-    const note = document.getElementById('cuKpiNote');
     if (!wrap || !canvas || !empty) return;
 
     const { points, hidden } = kpiSeries(SC.kpi);
@@ -891,11 +1105,7 @@ function createDeptPage(cfg) {
 
     wrap.style.display = hasData ? '' : 'none';
     empty.style.display = hasData ? 'none' : 'block';
-    if (note) {
-      note.textContent = hidden > 0
-        ? 'Menampilkan ' + points.length + ' hari produksi terakhir dari ' + (points.length + hidden) + ' hari terpilih'
-        : '';
-    }
+    setKpiNote(points.length, hidden);
     if (!hasData) { destroyKpiChart(); return; }
 
     const sc = kpiScales(points);
@@ -1339,8 +1549,11 @@ function createDeptPage(cfg) {
     const agg = catAggregate(rangeDates(s), s.pv, s.depts);
     const hasData = agg.cats.length > 0;
 
-    stack.style.display = hasData ? '' : 'none';
-    empty.style.display = hasData ? 'none' : 'block';
+    // Kipas dan pesan kosongnya sama-sama menyingkir waktu matriksnya terbuka:
+    // keduanya membaca rentang yang sama, jadi menampilkan dua-duanya cuma
+    // memanjangkan section tanpa menambah keterangan apa pun.
+    stack.style.display = hasData && !cuCatDetailOpen ? '' : 'none';
+    empty.style.display = !hasData && !cuCatDetailOpen ? 'block' : 'none';
     // Kamusnya sendiri yang belum ada, bukan datanya — bedakan, kalau tidak
     // orang mencari-cari data produksi yang sebenarnya ada.
     empty.textContent = Engine.hasDeptCategories()
@@ -1497,6 +1710,222 @@ function createDeptPage(cfg) {
   }
 
   // ═══════════════════════════════════════
+  //  EXPORT
+  // ═══════════════════════════════════════
+
+  // Isi tiap tabel detail dalam bentuk baris-baris mentah, disimpan waktu
+  // tabelnya digambar. Tombol export tinggal menuliskannya — jadi berkasnya
+  // dijamin sama dengan yang sedang terlihat, tanpa menghitung ulang apa pun
+  // dan tanpa risiko dua jalur perhitungan berselisih.
+  //
+  // Nilainya ANGKA, bukan teks yang sudah diformat. Yang dikirim ke Excel
+  // harus tetap bisa dijumlah dan dibuat grafik; "45.678" sebagai teks akan
+  // dibaca Excel sebagai 45,678 — atau, kalau tanggal, sebagai tanggal.
+  // Sel yang datanya memang tidak ada diisi null: ia jadi sel kosong, bukan
+  // nol yang ikut terhitung rata-rata.
+  let _exportKpi = null, _exportCats = null, _exportItems = null;
+
+  // Tombolnya menempel di kepala section, sebelah tombol Detail data — dan
+  // hanya muncul waktu tabelnya terbuka: yang bisa diexport memang cuma isi
+  // tabel itu, jadi tombol yang selalu terlihat cuma menimbulkan pertanyaan
+  // "yang mana yang diexport" waktu yang tampil masih chart.
+  //
+  // Bentuknya ikut tombol export di halaman Overview: kotak 30px berisi ikon
+  // saja, kelas .table-export-btn yang sama persis — satu bentuk untuk satu
+  // arti di seluruh aplikasi. Kelas .dc-export-btn cuma penanda supaya aturan
+  // [hidden] di CSS bisa menyasar tombol yang di sini saja.
+  function exportBtnHtml(id) {
+    return `<button type="button" class="table-export-btn dc-export-btn" id="${id}" title="Export" aria-label="Export" hidden>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+    </button>`;
+  }
+
+  // Tombol export dan tabelnya dipasangkan di satu tempat: yang menyalakan
+  // tombol, yang menyimpan isinya, dan yang menuliskannya ke berkas semuanya
+  // membaca satu payload yang sama.
+  function bindExport(btnId, get) {
+    const btn = document.getElementById(btnId);
+    if (btn) btn.addEventListener('click', () => exportSheet(get()));
+  }
+
+  function showExport(btnId, open) {
+    const btn = document.getElementById(btnId);
+    if (btn) btn.hidden = !open;
+  }
+
+  function fileStamp(dates) {
+    if (!dates.length) return '';
+    return ' ' + dates[0] + (dates.length > 1 ? '_' + dates[dates.length - 1] : '');
+  }
+
+  // Nama sheet Excel: maksimal 31 karakter dan tidak boleh memuat : \ / ? * [ ]
+  const safeSheet = (s) => s.replace(/[:\\/?*[\]]/g, '-').slice(0, 31);
+  const safeFile = (s) => s.replace(/[<>:"\\/|?*]/g, '-');
+
+  // Format bawaan tiap jenis sel. Ditulis ke properti z, jadi yang dilihat
+  // orang waktu berkasnya dibuka sama dengan yang dilihatnya di layar — tanpa
+  // mengubah nilainya jadi teks.
+  const XL_FMT = {
+    pct: '0.00%',
+    kg: '#,##0',
+    date: 'dd mmm yyyy',
+  };
+
+  // Angka persen di aplikasi ditulis 28,41 (yang dibaca orang), sedangkan
+  // Excel menyimpan persen sebagai PECAHAN — 0,2841 dengan format 0.00%.
+  // Pembagian 100 itu dikerjakan di sini, bukan di payload, supaya baris yang
+  // dipakai menggambar tabel tetap berisi angka yang sama persis dengan yang
+  // tampil. Tanpa ini selnya cuma angka telanjang 28,41: tidak ada tanda
+  // persennya, dan mengubah formatnya jadi Percent malah menghasilkan 2841%.
+  //
+  // Tanggal diubah jadi objek Date, bukan dibiarkan sebagai teks "2026-08-03".
+  // Teks tidak bisa diformat ulang, tidak bisa diurutkan sebagai tanggal, dan
+  // tidak bisa dipakai sumbu grafik — itu yang membuat kolomnya "tidak bisa
+  // dirubah jadi tipe date" di Excel.
+  //
+  // Date-nya dirakit dari komponen y/m/d, BUKAN new Date('2026-08-03'):
+  // bentuk ISO itu diurai sebagai UTC tengah malam, dan di WIB (UTC+7)
+  // SheetJS menghitungnya mundur jadi tanggal sebelumnya.
+  function toExcelDate(v) {
+    if (typeof v !== 'string') return null;
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v);
+    return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null;
+  }
+
+  function applyCellTypes(ws, kind) {
+    if (!kind || !ws['!ref']) return;
+    const range = XLSX.utils.decode_range(ws['!ref']);
+    for (let r = range.s.r; r <= range.e.r; r++) {
+      for (let c = range.s.c; c <= range.e.c; c++) {
+        const cell = ws[XLSX.utils.encode_cell({ r, c })];
+        if (!cell || cell.v === null || cell.v === undefined) continue;
+        const k = kind(r, c);
+        if (k === 'pct' && typeof cell.v === 'number') {
+          cell.v = cell.v / 100;
+          cell.t = 'n';
+          cell.z = XL_FMT.pct;
+        } else if (k === 'kg' && typeof cell.v === 'number') {
+          cell.t = 'n';
+          cell.z = XL_FMT.kg;
+        } else if (k === 'date') {
+          const d = toExcelDate(cell.v);
+          if (d) { cell.v = d; cell.t = 'd'; cell.z = XL_FMT.date; }
+        }
+      }
+    }
+  }
+
+  function exportSheet(payload) {
+    if (!payload || typeof XLSX === 'undefined') return;
+    const ws = XLSX.utils.aoa_to_sheet(payload.rows);
+    applyCellTypes(ws, payload.kind);
+    // Tanpa lebar kolom, tanggal yang sudah bertipe date muncul sebagai #####
+    // di kolom bawaan yang sempit — terbaca seperti berkas yang rusak.
+    if (payload.cols) ws['!cols'] = payload.cols;
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, safeSheet(payload.sheet));
+    XLSX.writeFile(wb, safeFile(payload.file) + '.xlsx');
+  }
+
+  // ═══════════════════════════════════════
+  //  MATRIKS KATEGORI × TANGGAL
+  // ═══════════════════════════════════════
+
+  // Kategori jadi baris, tanggal jadi kolom, isinya persen. Persennya dihitung
+  // ULANG per tanggal — catAggregate dipanggil sekali untuk tiap tanggal —
+  // bukan dipecah dari persen rentang. Penyebutnya BAHAN hari itu sendiri,
+  // jadi tiap kolom berdiri sendiri dan bisa dibandingkan antar hari walau
+  // jumlah bahan yang masuk berbeda-beda. Dipecah dari total rentang, yang
+  // terbaca justru sumbangan tiap hari terhadap rentang, bukan komposisi
+  // hari itu.
+  //
+  // Hasilnya di-cache di catAggregate (kunci per daftar tanggal), jadi buka —
+  // tutup berulang tidak menghitung ulang apa pun.
+  function renderCatTable() {
+    const table = document.getElementById('cuCatTable');
+    if (!table) return;
+    const s = SC.cards;
+    const dates = rangeDates(s);
+    const agg = catAggregate(dates, s.pv, s.depts);
+
+    if (!dates.length || !agg.cats.length) {
+      table.innerHTML = `<tbody><tr><td class="cu-td-empty">Tidak ada data untuk periode ini</td></tr></tbody>`;
+      _exportCats = null;
+      return;
+    }
+
+    const perDate = dates.map(d => new Map(
+      catAggregate([d], s.pv, s.depts).cats.map(c => [c.name, c.pct])
+    ));
+
+    // Nilai mentahnya disusun sekali di sini, lalu dipakai DUA kali: digambar
+    // jadi tabel dan disimpan untuk export. Dibangun terpisah, dua-duanya
+    // punya peluang berbeda urutan atau berbeda isi tanpa ada yang tahu.
+    // Kategori yang tidak diproduksi hari itu bernilai null — di layar jadi
+    // strip, di Excel jadi sel kosong. Nol tidak dipakai: "tidak ada" dan "ada
+    // tapi kecil sekali" tidak boleh terbaca sama.
+    //
+    // Urutan barisnya mengikuti agregat seluruh rentang — urutan yang sama
+    // dengan kipas di atasnya, jadi mata tidak perlu mencari-cari lagi waktu
+    // berpindah dari kartu ke tabel. Nama kategorinya UTUH di sini: kolomnya
+    // punya ruang, dan singkatan "C." cuma perlu di bilah kartu yang sempit.
+    // Kolom rata-rata cuma berarti kalau tanggalnya lebih dari satu; pada satu
+    // tanggal ia cuma menyalin kolom di sebelahnya.
+    //
+    // Nilainya c.pct — persen agregat SELURUH rentang, yaitu kg kategori itu
+    // sepanjang rentang dibagi BAHAN sepanjang rentang. Itu sudah rata-rata
+    // TERTIMBANG dengan sendirinya: hari yang bahannya dua kali lipat memberi
+    // bobot dua kali lipat, karena kg-nya ikut terjumlah di pembilang maupun
+    // penyebut. Merata-ratakan kolom persennya begitu saja justru memberi
+    // bobot sama pada hari yang bahannya seiprit dan hari yang penuh — dan
+    // hasilnya tidak lagi sama dengan angka di kartu kipas.
+    const avg = dates.length > 1;
+
+    const rows = agg.cats.map(c => [
+      c.name,
+      ...perDate.map(m => { const v = m.get(c.name); return v === undefined ? null : v; }),
+      ...(avg ? [c.pct] : []),
+    ]);
+
+    const cell = (v, cls) => `<td class="cu-num${cls}">${v === null
+      ? '<span class="dc-nil">–</span>'
+      : `<span class="cu-num-val cu-num-pct">${fmtPct(v, 2)}</span>`}</td>`;
+
+    table.innerHTML = `
+      <thead>
+        <tr>
+          <th class="dc-th-cat">Kategori</th>
+          ${dates.map(d => `<th class="cu-num">${esc(fmtDateShort(d))}</th>`).join('')}
+          ${avg ? '<th class="cu-num dc-avg" title="Rata-rata tertimbang seluruh rentang">Rata-rata</th>' : ''}
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map(r => {
+          const vals = r.slice(1);
+          const last = vals.length - 1;
+          return `<tr>
+            <td class="dc-td-cat" title="${esc(r[0])}">${esc(r[0])}</td>
+            ${vals.map((v, i) => cell(v, avg && i === last ? ' dc-avg' : '')).join('')}
+          </tr>`;
+        }).join('')}
+      </tbody>`;
+
+    _exportCats = {
+      rows: [['Kategori', ...dates, ...(avg ? ['Rata-rata'] : [])], ...rows],
+      // Baris 0 kepala tabel, kolom 0 nama kategori; sisanya persen. Kepala
+      // kolom rata-rata satu-satunya sel di baris 0 yang bukan tanggal.
+      kind: (r, c) => (
+        c === 0 ? null
+          : r === 0 ? (avg && c === dates.length + 1 ? null : 'date')
+            : 'pct'
+      ),
+      cols: [{ wch: 24 }, ...dates.map(() => ({ wch: 12 })), ...(avg ? [{ wch: 12 }] : [])],
+      sheet: 'Kategori',
+      file: cfg.pageTitle + ' - ' + cfg.cards.title + fileStamp(dates),
+    };
+  }
+
+  // ═══════════════════════════════════════
   //  TABEL
   // ═══════════════════════════════════════
 
@@ -1521,8 +1950,33 @@ function createDeptPage(cfg) {
     if (!shown.length) {
       table.innerHTML = `<tbody><tr><td class="cu-td-empty">Tidak ada data HASIL untuk periode ini</td></tr></tbody>`;
       btn.style.display = 'none';
+      _exportItems = null;
       return;
     }
+
+    // Export SELALU membawa seluruh item, tidak peduli daftarnya sedang
+    // dipendekkan jadi 5 teratas atau tidak: tombolnya diminta untuk
+    // memindahkan datanya keluar, dan sisanya tetap ada di sana. Baris agregat
+    // "Item Lainnya" karena itu juga tidak ikut — di berkas, tiap item sudah
+    // punya barisnya masing-masing.
+    const dates = rangeDates(s);
+    _exportItems = {
+      rows: [
+        ['No', 'Nama Item', 'Jumlah (' + unitLabel(s) + ')', 'Persentase (%)'],
+        ...sorted.map((it, i) => [
+          i + 1,
+          it.name,
+          Math.round(it[s.unit]),
+          total ? (it[s.unit] / total) * 100 : 0,
+        ]),
+      ],
+      // Di tabel ini yang menentukan jenis sel kolomnya, bukan barisnya:
+      // 2 jumlah, 3 persentase. Baris 0 kepala tabel.
+      kind: (r, c) => (r === 0 ? null : c === 2 ? 'kg' : c === 3 ? 'pct' : null),
+      cols: [{ wch: 5 }, { wch: 40 }, { wch: 14 }, { wch: 14 }],
+      sheet: 'Item',
+      file: cfg.pageTitle + ' - Item' + fileStamp(dates),
+    };
 
     table.innerHTML = `
       <thead>

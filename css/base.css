@@ -32,6 +32,11 @@
   --purple-light: #f5f3ff;
   --pink: #ec4899;
   --pink-light: #fdf2f8;
+  /* Satu tingkat di antara --pink-light dan --pink: cukup pekat untuk terbaca
+     sebagai pink, masih cukup terang untuk teks --text-mid di atasnya. Latar
+     header tabel detail — dipakai Trafic Bahan Karkas dan matriks kategori di
+     halaman dept, jadi keduanya bergeser bersama kalau warnanya disetel. */
+  --pink-head: #fbcfe8;
   --teal: #14b8a6;
 
   /* ── Semantic ── */
