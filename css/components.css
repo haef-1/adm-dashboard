@@ -23,7 +23,8 @@
    header cuma menambah satu rusuk sejajar. */
 #sectionKpi .section-header,
 #cuKpiSection .section-header,
-#cuChartSection .section-header {
+#cuChartSection .section-header,
+#cuCardSection .section-header {
   border-bottom: none;
 }
 
