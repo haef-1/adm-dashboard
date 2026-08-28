@@ -613,6 +613,98 @@
   min-width: 0;
 }
 
+/* Judul panelnya sengaja disembunyikan (chart ini punya judul tegak sendiri di
+   samping sumbu Y), jadi tombol "Detail data" satu-satunya isi baris header.
+   space-between bawaan .split-panel-header akan menaruhnya di kiri karena cuma
+   ada satu anak — dipaksa ke kanan supaya sebaris dengan tombol serupa milik
+   Trafic Bahan Karkas di section bawah. */
+#chartPanel .split-panel-header {
+  justify-content: flex-end;
+}
+
+/* Tombol export di ujung baris filter. 30px bawaan .table-export-btn kelewat
+   jangkung di sini — tetangganya (toggle BRD/KG dan tombol range) tingginya
+   ~26px, jadi disamakan supaya barisnya rata. */
+.chart-controls .dc-export-btn {
+  width: 26px;
+  height: 26px;
+}
+
+/* Mode detail: grafik dan legendanya digantikan tabel Departemen × Periode
+   (bentuknya sama dengan Karkas Distribution, kelas .krk-* dipakai ulang).
+   Baris kontrol di atasnya tetap terlihat — satu set filter dipakai bergantian
+   oleh kedua tampilan. */
+#chartPanel.detail-open .chart-area,
+#chartPanel.detail-open .chart-legend {
+  display: none;
+}
+
+/* Kolom periodenya lebih lebar dari panel separuh layar, jadi tabelnya digulir
+   mendatar di dalam sini — bukan melebarkan panelnya. Scrollbar-nya sengaja
+   dibiarkan terlihat: halaman Karkas menyembunyikannya karena punya scroll
+   proxy sendiri di atas tabel, di sini tidak ada penggantinya.
+   Tegaknya TIDAK dibatasi: seluruh baris material harus terbaca sekaligus,
+   jadi panelnya yang memanjang mengikuti isi tabel, bukan tabelnya yang
+   digulir di dalam kotak. overflow-y:hidden (bukan visible) wajib — dengan
+   overflow-x:auto, `visible` dihitung ulang jadi `auto` oleh browser dan
+   scrollbar tegaknya muncul lagi; tanpa batas tinggi, hidden tidak memotong
+   apa pun. */
+.bahan-detail {
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  /* Ditarik keluar sampai tepi panel: padding mendatar .split-panel (20px)
+     dibatalkan, jadi kolom terakhir tidak lagi terpotong lebih awal dan
+     rentang yang muat tanpa digulir bertambah lebar. Nilainya harus tetap
+     mengikuti padding itu — sama di semua breakpoint. */
+  margin-left: -20px;
+  margin-right: -20px;
+}
+
+/* Padding sel bawaan .data-table (12px kiri-kanan) memakan lebar yang di sini
+   dibutuhkan angkanya sendiri: 7 kolom periode + Total di dalam panel yang
+   cuma separuh baris. Dirapatkan khusus tabel ini — halaman Karkas punya
+   selebar layar penuh, jadi bawaannya dibiarkan. */
+.bahan-detail .krk-table th,
+.bahan-detail .krk-table td {
+  padding-left: 7px;
+  padding-right: 7px;
+}
+
+/* Indentasi nama material ikut dirapatkan supaya kolom pertama tidak jadi
+   bagian paling boros setelah sel lain menyempit. */
+.bahan-detail .krk-sub-row td:first-child {
+  padding-left: 20px;
+}
+
+/* Salinan baris header yang menempel di bawah topbar (dipasang dari
+   overview.js). Posisi, lebar, dan geseran mendatarnya diukur saat runtime;
+   yang tinggal di sini cuma yang tidak berubah.
+   z-index harus DI BAWAH .sidebar-overlay (49) dan .sidebar (50/51): ketiganya
+   elemen fixed di body, jadi kalau setara atau lebih tinggi, bar ini melayang
+   di atas sidebar yang sedang dibuka — tidak ikut teredup seperti sisa
+   halaman. */
+.bahan-sticky-head {
+  position: fixed;
+  z-index: 48;
+  display: none;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+/* Baris departemen yang menempel di bawah bar header. Satu tingkat z-index di
+   bawahnya supaya saat terdorong ke atas (baris departemen berikutnya masuk)
+   dia lewat DI BALIK header, bukan menimpanya. Posisi tegaknya dihitung
+   runtime — tidak ada `top` di sini. */
+.bahan-sticky-dept {
+  position: fixed;
+  z-index: 47;
+  display: none;
+  overflow: hidden;
+  background: var(--bg);
+  cursor: pointer;
+}
+
 .chart-legend {
   display: flex;
   justify-content: center;
@@ -3002,6 +3094,24 @@
   z-index: 5;
   background: var(--bg);
 }
+
+/* ── Header tabel "Detail data" di Overview ──
+   Pink muda yang sama dengan tabel Detail data lain — matriks Trafic Bahan
+   (.traffic-detail-table) dan .cu-table di halaman dept — lewat token yang
+   sama, jadi ketiganya seragam. Teksnya --text-mid supaya kontrasnya aman di
+   atas pink itu.
+   Ditaruh di sini, bukan digabung ke blok .bahan-detail di atas: spesifisitas
+   selektor ini seri dengan `.smt-table thead th:first-child` dan `.krk-table
+   thead th` yang memasang --bg, jadi urutan sumber yang menentukan — ditulis
+   lebih awal, sudut kiri headernya balik jadi abu sendirian.
+   Salinan header di bar yang menempel tinggal di luar .bahan-detail (elemen
+   fixed di <body>), jadi ia harus disebut sendiri supaya ikut pink. */
+.bahan-detail .krk-table thead th,
+.bahan-sticky-head .krk-table thead th {
+  background: var(--pink-head);
+  color: var(--text-mid);
+}
+
 .krk-pinned-header-cell {
   position: absolute;
   top: 0;
@@ -3030,7 +3140,9 @@
    `left: 100%` menaruh strip tepat di luar tepi kanan sel, jadi buramnya jatuh
    di atas konten yang tergeser, bukan ke dalam kolom bekunya. */
 .krk-table-wrap.is-frozen .krk-table th:first-child::after,
-.krk-table-wrap.is-frozen .krk-table td:first-child::after {
+.krk-table-wrap.is-frozen .krk-table td:first-child::after,
+.bahan-detail.is-frozen .krk-table th:first-child::after,
+.bahan-detail.is-frozen .krk-table td:first-child::after {
   content: "";
   position: absolute;
   top: 0;
@@ -3163,6 +3275,23 @@
 
 #trafficBody.detail-open .traffic-dept-btn {
   display: inline-flex;
+}
+
+/* Export juga cuma berlaku untuk matriks, jadi ia muncul dan hilang bersama
+   tampilan detail — mekanisme yang sama dengan "Map dept color" di atas,
+   bukan atribut [hidden] seperti tombol export di panel chart, supaya kedua
+   tombol di baris ini dikendalikan satu cara yang sama.
+   `display:none` di sini menang atas `display:flex` milik .table-export-btn
+   karena spesifisitasnya seri dan aturan ini ditulis belakangan.
+   30px bawaannya kelewat jangkung di sebelah toggle BRD/KG yang ~26px. */
+.traffic-export-btn {
+  display: none;
+  width: 26px;
+  height: 26px;
+}
+
+#trafficBody.detail-open .traffic-export-btn {
+  display: flex;
 }
 
 /* Aktif — dibedakan dengan warna aksen, bukan cuma tebal, karena tombolnya

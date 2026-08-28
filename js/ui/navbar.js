@@ -84,6 +84,7 @@ const Navbar = (() => {
     });
 
     // Clean up previous page
+    if (typeof OverviewPage !== 'undefined' && OverviewPage.destroy) OverviewPage.destroy();
     if (typeof KarkasTablePage !== 'undefined' && KarkasTablePage.destroy) KarkasTablePage.destroy();
     if (typeof CutUpPage !== 'undefined' && CutUpPage.destroy) CutUpPage.destroy();
     if (typeof BonelessPage !== 'undefined' && BonelessPage.destroy) BonelessPage.destroy();

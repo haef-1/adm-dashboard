@@ -12,6 +12,11 @@ const OverviewPage = (() => {
   let chartSelectedItems = null;
   let chartSelectedFrom = null;
   let chartSelectedTo = null;
+  // Tabel Departemen × Material menggantikan grafik batangnya. Isinya sama
+  // persis dengan Karkas Distribution di halaman Karkas — Table: filter
+  // bahannya identik, jadi tiap batang di grafik = satu kolom di tabel ini.
+  let bahanDetailOpen = false;
+  let bahanCollapsedDepts = {};
   let _rangeDocListener = null;
   let _rangeScrollListener = null;
   let _srDocListener = null;
@@ -71,6 +76,15 @@ const OverviewPage = (() => {
           <div class="split-panel" id="chartPanel">
             <div class="split-panel-header">
               <div class="split-panel-title" style="display:none">Bahan Karkas</div>
+              <!-- Judulnya disembunyikan, jadi tombolnya sendirian di baris
+                   ini — didorong ke kanan lewat CSS supaya sejajar dengan
+                   tombol "Detail data" milik Trafic Bahan Karkas di bawah.
+                   Tombol export-nya TIDAK di sini: tempatnya di ujung baris
+                   filter, sebelah kanan range picker. -->
+              <button type="button" class="traffic-detail-btn" id="bahanDetailBtn" aria-expanded="false">
+                <span class="traffic-detail-sign" id="bahanDetailSign" aria-hidden="true">+</span>
+                <span id="bahanDetailLabel">Detail data</span>
+              </button>
             </div>
             <div id="chartControls"></div>
             <div class="chart-area">
@@ -80,6 +94,12 @@ const OverviewPage = (() => {
               </div>
             </div>
             <div class="chart-legend" id="chartLegend"></div>
+            <!-- Tampilan detail: tabel Departemen × Periode, sama seperti
+                 Karkas Distribution. Menggantikan grafik + legend saat tombol
+                 "Detail data" ditekan; filter di baris kontrol di atasnya
+                 tetap yang sama, jadi keduanya selalu memotret rentang yang
+                 sama. -->
+            <div class="bahan-detail" id="bahanDetail" hidden></div>
           </div>
         </div>
       </div>
@@ -107,6 +127,14 @@ const OverviewPage = (() => {
                     <button class="toggle-btn active" data-metric="brd">BRD</button>
                     <button class="toggle-btn" data-metric="kg">KG</button>
                   </div>
+                  <!-- Tepat di kanan BRD/KG: yang diexport adalah matriks
+                       dengan metrik yang dipilih di toggle itu. Hanya muncul
+                       di mode detail (lewat CSS), sama seperti "Map dept
+                       color" — selama yang tampil masih grafik, tidak ada
+                       tabel yang bisa diexport. -->
+                  <button type="button" class="table-export-btn traffic-export-btn" id="trafficExportBtn" title="Export" aria-label="Export">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  </button>
                   <div id="trafficDateNav"></div>
                   <!-- Hanya muncul di mode detail (disembunyikan lewat CSS). -->
                   <button type="button" class="traffic-detail-btn traffic-dept-btn" id="trafficDeptBtn" aria-pressed="false">
@@ -379,6 +407,13 @@ const OverviewPage = (() => {
         <div id="periodSelectWrap"></div>
         <div class="spacer"></div>
         <div id="chartRangeNav"></div>
+        <!-- Export duduk di ujung kanan baris filter, tepat setelah range
+             picker: yang diexport adalah tabel dengan rentang dan metrik yang
+             dipilih di baris ini juga. Disembunyikan sampai tabelnya terbuka —
+             selama yang tampil masih chart, tidak ada yang bisa diexport. -->
+        <button type="button" class="table-export-btn dc-export-btn" id="bahanExportBtn" title="Export" aria-label="Export" hidden>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        </button>
       </div>
     `;
 
@@ -445,6 +480,22 @@ const OverviewPage = (() => {
       </div>`,
       )
       .join("");
+
+    // Tombol "Detail data" / "Collapse data". Dua tampilan berbagi satu set
+    // filter, jadi tombolnya cukup membalik state lalu menyerahkan sisanya ke
+    // renderBahanChart — dia yang memilih menggambar grafik atau tabel.
+    document.getElementById("bahanDetailBtn")?.addEventListener("click", () => {
+      bahanDetailOpen = !bahanDetailOpen;
+      applyBahanDetailState();
+      renderBahanChart();
+    });
+    document
+      .getElementById("bahanExportBtn")
+      ?.addEventListener("click", exportBahanDetail);
+
+    // Overview di-render ulang tiap kali halamannya dibuka; markup-nya selalu
+    // lahir tertutup, jadi state yang masih hidup dipasang ulang di sini.
+    applyBahanDetailState();
 
     document.addEventListener("click", (e) => {
       const wrap = document.getElementById("chartWrap");
@@ -672,10 +723,17 @@ const OverviewPage = (() => {
       data: dataByDept[dept],
     }));
 
-    Charts.buildStackedBar("bahanChart", { labels, datasets }, (bi, barMeta) => {
-      if (bi < 0) { closeBahanPopover(); return; }
-      showBahanPopover(bi, barMeta);
-    });
+    // Tabel detail menggantikan grafiknya. Chart-nya sengaja tidak digambar
+    // selagi tersembunyi (lebarnya 0 → Chart.js salah ukur); saat kembali ke
+    // tampilan grafik, buildStackedBar membuatnya dari awal.
+    if (bahanDetailOpen) {
+      renderBahanDetail();
+    } else {
+      Charts.buildStackedBar("bahanChart", { labels, datasets }, (bi, barMeta) => {
+        if (bi < 0) { closeBahanPopover(); return; }
+        showBahanPopover(bi, barMeta);
+      });
+    }
 
     const navEl = document.getElementById("chartRangeNav");
     if (navEl) {
@@ -721,6 +779,575 @@ const OverviewPage = (() => {
         .getElementById("chartRangeBtn")
         .addEventListener("click", openChartRangePicker);
     }
+  }
+
+  // ══════════════════════════════════════
+  // Detail: tabel Departemen × Material (Karkas Distribution)
+  // ══════════════════════════════════════
+  //
+  // Isinya persis tabel di halaman Karkas — Table: baris departemen yang bisa
+  // dilipat, sub-baris per material, satu kolom per periode, plus kolom Total.
+  // Angkanya boleh dibaca berdampingan dengan grafik yang digantikannya karena
+  // syarat bahannya memang sama persis dengan getBahanDistribution — total tiap
+  // kolom di sini setinggi batang di tanggal yang sama.
+
+  // "KARKAS 1.0-1.1" → "K 1.0-1.1". Kata KARKAS berulang di setiap baris dan
+  // tidak membedakan apa pun, sementara kolom pertama harus berbagi lebar
+  // dengan kolom periode. Matriks Trafic Bahan Karkas memangkas nama dengan
+  // alasan yang sama, bedanya di sana rentangnya ikut dipotong jadi batas
+  // bawahnya saja ("K 1.0") karena berdesakan dengan 24 kolom jam — di sini
+  // rentangnya utuh, kolomnya masih cukup lapang.
+  //
+  // Nama yang tidak diawali "KARKAS" dibiarkan apa adanya: baris AYAM LAMA
+  // (sloc CRP/REPRO) tidak disaring berdasarkan nama, jadi bentuk lain bisa
+  // ikut muncul di tabel ini. Nama utuhnya tetap ada di atribut title tiap
+  // sel — dipakai tooltip, dan dikembalikan lagi saat export.
+  function shortMatLabel(md) {
+    return String(md).replace(/^KARKAS\s*/i, "K ").trim();
+  }
+
+  const BD_DEPTS = ["CUT UP", "BONELESS", "AU", "PARTING"];
+  const BD_COLORS = { "CUT UP": "#34d399", "BONELESS": "#60a5fa", "AU": "#fbbf24", "PARTING": "#f472b6" };
+  const BD_BG = { "CUT UP": "#ecfdf5", "BONELESS": "#dbeafe", "AU": "#fefce8", "PARTING": "#fdf2f8" };
+
+  function applyBahanDetailState() {
+    const btn = document.getElementById("bahanDetailBtn");
+    if (btn) {
+      btn.classList.toggle("is-open", bahanDetailOpen);
+      btn.setAttribute("aria-expanded", String(bahanDetailOpen));
+      const sign = document.getElementById("bahanDetailSign");
+      const label = document.getElementById("bahanDetailLabel");
+      if (sign) sign.textContent = bahanDetailOpen ? "−" : "+";
+      if (label) label.textContent = bahanDetailOpen ? "Collapse data" : "Detail data";
+    }
+    document
+      .getElementById("chartPanel")
+      ?.classList.toggle("detail-open", bahanDetailOpen);
+    const exportBtn = document.getElementById("bahanExportBtn");
+    if (exportBtn) exportBtn.hidden = !bahanDetailOpen;
+    const detail = document.getElementById("bahanDetail");
+    if (detail) detail.hidden = !bahanDetailOpen;
+    // Bar header-nya elemen fixed di body, di luar panel ini — kalau tidak
+    // dibongkar saat detail ditutup dia menggantung di atas halaman.
+    if (!bahanDetailOpen) destroyBahanStickyHeader();
+  }
+
+  // Kolom periodenya mengikuti rentang yang sedang dipakai grafik — pemilihan
+  // tanggal, minggu, atau bulan yang sama, bukan daftar sendiri.
+  function bahanDetailColumns() {
+    const dates = Engine.getAvailableDates();
+    if (!dates.length) return [];
+    const MAX = 7;
+
+    if (chartPeriod === "daily") {
+      const range = chartSelectedItems
+        ? dates.filter((d) => chartSelectedItems.includes(d))
+        : dates.slice(-MAX);
+      return range.map((d) => {
+        const p = d.split("-");
+        return {
+          key: d,
+          label: p[2] + " " + MONTH_NAMES[parseInt(p[1])] + " " + p[0].slice(2),
+          dates: [d],
+        };
+      });
+    }
+    if (chartPeriod === "weekly") {
+      const weekMap = getWeekMap(dates);
+      const allKeys = Object.keys(weekMap);
+      const keys = chartSelectedItems
+        ? allKeys.filter((k) => chartSelectedItems.includes(k))
+        : allKeys.slice(-MAX);
+      return keys.map((wk) => ({
+        key: wk,
+        label: "W" + wk.split("-W")[1] + " " + wk.split("-W")[0].slice(2),
+        dates: weekMap[wk],
+      }));
+    }
+    const monthMap = getMonthMap(dates);
+    const allKeys = Object.keys(monthMap);
+    const keys = chartSelectedItems
+      ? allKeys.filter((k) => chartSelectedItems.includes(k))
+      : allKeys.slice(-MAX);
+    return keys.map((ym) => ({
+      key: ym,
+      label: KPI.formatMonthYear(ym),
+      dates: monthMap[ym],
+    }));
+  }
+
+  // dept → matdesc → tanggal → { brd, kg }
+  function buildBahanDetailData(columns) {
+    const allDates = [];
+    columns.forEach((c) => c.dates.forEach((d) => allDates.push(d)));
+
+    const lookups = Engine.getLookups();
+    const rows = Engine.getRowsForDates(allDates);
+    const BONELESS_DEPTS = new Set(["BONELESS BONGKAR", "BONELESS MIX"]);
+
+    const data = {};
+    BD_DEPTS.forEach((d) => { data[d] = {}; });
+
+    rows.forEach((r) => {
+      const rawDept = lookups.dept[r[0]];
+      const pv = lookups.pv[r[1]];
+      const mvt = lookups.mvt[r[5]];
+      const sloc = lookups.sloc[r[9]];
+      const matdesc = lookups.matdesc[r[4]];
+      const date = r[8];
+
+      if (mvt !== "BAHAN") return;
+
+      const dept = BONELESS_DEPTS.has(rawDept) ? "BONELESS" : rawDept;
+      if (!data[dept]) return;
+
+      let ok = false;
+      if (chartPvMode === "AYAM BARU" || chartPvMode === "AYAM PROSES") {
+        if (pv === "AYAM BARU" && sloc === "STAGING RM" && matdesc.includes("KARKAS")) ok = true;
+      }
+      if (chartPvMode === "AYAM LAMA" || chartPvMode === "AYAM PROSES") {
+        if (pv === "AYAM LAMA" && (sloc === "CRP" || sloc === "REPRO")) ok = true;
+      }
+      if (!ok) return;
+
+      if (!data[dept][matdesc]) data[dept][matdesc] = {};
+      if (!data[dept][matdesc][date]) data[dept][matdesc][date] = { brd: 0, kg: 0 };
+      data[dept][matdesc][date].brd += r[6];
+      data[dept][matdesc][date].kg += r[7];
+    });
+
+    return data;
+  }
+
+  function renderBahanDetail() {
+    const wrap = document.getElementById("bahanDetail");
+    if (!wrap) return;
+
+    const columns = bahanDetailColumns();
+    if (!columns.length) {
+      destroyBahanStickyHeader();
+      wrap.innerHTML = `<p class="table-empty">Tidak ada data untuk periode ini.</p>`;
+      return;
+    }
+
+    const data = buildBahanDetailData(columns);
+    const isKg = chartMetric === "kg";
+    // KG ditampilkan bulat, sama seperti BRD: dua angka di belakang koma di
+    // setiap sel cuma menambah lebar kolom tanpa mengubah apa yang dibaca
+    // orang dari tabel ini. Yang dibulatkan HANYA yang tampil — atribut data-v
+    // tiap sel tetap memegang nilai asli berkoma, dan itu yang dibaca export
+    // (lihat exportBahanDetail), jadi angka di Excel tetap utuh.
+    const _fmtInt = new Intl.NumberFormat("id-ID", { maximumFractionDigits: 0 });
+    const fmtVal = (v) => _fmtInt.format(Math.round(v));
+    const metricLabel = isKg ? "KG" : "BRD";
+
+    const lastIdx = columns.length - 1;
+    const grandTotals = {};
+    columns.forEach((c) => { grandTotals[c.key] = 0; });
+    let grandTotal = 0;
+    let bodyHtml = "";
+
+    BD_DEPTS.forEach((dept) => {
+      const matdescs = Object.keys(data[dept]).sort();
+      const isCollapsed = bahanCollapsedDepts[dept];
+
+      const deptColTotals = {};
+      let deptTotal = 0;
+      columns.forEach((col) => {
+        let sum = 0;
+        matdescs.forEach((md) => {
+          col.dates.forEach((d) => {
+            const v = data[dept][md]?.[d];
+            if (v) sum += isKg ? v.kg : v.brd;
+          });
+        });
+        deptColTotals[col.key] = sum;
+        deptTotal += sum;
+        grandTotals[col.key] += sum;
+      });
+      grandTotal += deptTotal;
+
+      bodyHtml += `<tr class="krk-dept-row" data-dept="${dept}" style="background:${BD_BG[dept]}">
+        <td class="krk-dept-cell" style="background:${BD_BG[dept]}">
+          <span class="krk-dept-dot" style="background:${BD_COLORS[dept]}"></span>
+          <span class="krk-dept-toggle">${isCollapsed ? "&#9654;" : "&#9660;"}</span>
+          ${dept}
+          <span class="krk-dept-count">${matdescs.length}</span>
+        </td>
+        ${columns.map((c, ci) => `<td data-v="${deptColTotals[c.key]}"${ci === lastIdx ? ' class="krk-col-latest"' : ''}><strong>${fmtVal(deptColTotals[c.key])}</strong></td>`).join("")}
+        <td data-v="${deptTotal}"><strong>${fmtVal(deptTotal)}</strong></td>
+      </tr>`;
+
+      matdescs.forEach((md, mi) => {
+        let rowTotal = 0;
+        const vals = columns.map((col) => {
+          let sum = 0;
+          col.dates.forEach((d) => {
+            const v = data[dept][md]?.[d];
+            if (v) sum += isKg ? v.kg : v.brd;
+          });
+          rowTotal += sum;
+          return sum;
+        });
+
+        const isLast = mi === matdescs.length - 1;
+        bodyHtml += `<tr class="krk-sub-row${isLast ? " krk-sub-last" : ""}" data-dept="${dept}"${isCollapsed ? ' style="display:none"' : ''}>
+          <td class="krk-mat-cell" title="${md}"><span class="krk-mat-name">${shortMatLabel(md)}</span></td>
+          ${vals.map((v, i) => `<td data-v="${v}"${i === lastIdx ? ' class="krk-col-latest"' : ''}>${fmtVal(v)}</td>`).join("")}
+          <td data-v="${rowTotal}">${fmtVal(rowTotal)}</td>
+        </tr>`;
+      });
+    });
+
+    bodyHtml += `<tr class="smt-total-row">
+      <td><strong>TOTAL</strong></td>
+      ${columns.map((c, ci) => `<td data-v="${grandTotals[c.key]}"${ci === lastIdx ? ' class="krk-col-latest"' : ''}><strong>${fmtVal(grandTotals[c.key])}</strong></td>`).join("")}
+      <td data-v="${grandTotal}"><strong>${fmtVal(grandTotal)}</strong></td>
+    </tr>`;
+
+    wrap.innerHTML = `
+      <table class="data-table smt-table krk-table">
+        <thead>
+          <tr>
+            <th>Dept/Mat (${metricLabel})</th>
+            ${columns.map((c, ci) => `<th${ci === lastIdx ? ' class="krk-col-latest"' : ''}>${c.label}</th>`).join("")}
+            <th>Total</th>
+          </tr>
+        </thead>
+        <tbody>${bodyHtml}</tbody>
+      </table>
+    `;
+
+    // Lipat/buka departemen langsung di DOM — tabelnya tidak digambar ulang,
+    // jadi posisi gulir mendatarnya tidak ikut melompat ke awal.
+    wrap.querySelectorAll(".krk-dept-row").forEach((row) => {
+      row.addEventListener("click", () => {
+        const dept = row.dataset.dept;
+        bahanCollapsedDepts[dept] = !bahanCollapsedDepts[dept];
+        const hidden = bahanCollapsedDepts[dept];
+        wrap.querySelectorAll(`.krk-sub-row[data-dept="${dept}"]`).forEach((sr) => {
+          sr.style.display = hidden ? "none" : "";
+        });
+        const toggle = row.querySelector(".krk-dept-toggle");
+        if (toggle) toggle.innerHTML = hidden ? "&#9654;" : "&#9660;";
+        _bahanStickyRefresh?.();
+      });
+    });
+
+    initBahanStickyHeader();
+  }
+
+  // ── Export tabel detail ke .xlsx ──
+  // Cara yang sama dengan halaman Karkas: sheet-nya dibangun dari tabel yang
+  // SUDAH tergambar, jadi isi berkasnya persis yang dilihat di layar — termasuk
+  // rentang dan metrik yang sedang dipilih. Tiap sel yang membawa data-v lalu
+  // dikembalikan jadi angka: yang tertulis di layar sudah diformat id-ID
+  // ("1.234,56"), dan kalau itu yang masuk Excel, isinya jadi teks yang tidak
+  // bisa dijumlahkan.
+  //
+  // Baris departemen yang sedang dilipat tetap ikut terbawa — melipat cuma
+  // menyembunyikannya di layar, sementara yang diminta orang saat menekan
+  // Export adalah seluruh isi tabel.
+  function exportBahanDetail() {
+    const table = document.querySelector("#bahanDetail .krk-table");
+    if (!table || typeof XLSX === "undefined") return;
+
+    const ws = XLSX.utils.table_to_sheet(table);
+    table.querySelectorAll("tr").forEach((tr, r) => {
+      tr.querySelectorAll("th, td").forEach((cell, c) => {
+        const addr = XLSX.utils.encode_cell({ r, c });
+        if (!ws[addr]) return;
+
+        // Nama material dipendekkan di layar ("K 1.0-1.1") demi lebar kolom.
+        // Di berkas ruangnya tidak terbatas, jadi nama utuh yang tersimpan di
+        // atribut title dikembalikan.
+        const full = cell.getAttribute("title");
+        if (full) { ws[addr].t = "s"; ws[addr].v = full; return; }
+
+        const raw = cell.getAttribute("data-v");
+        if (raw === null) return;
+        const num = parseFloat(raw);
+        if (isNaN(num)) return;
+        ws[addr].t = "n";
+        ws[addr].v = num;
+      });
+    });
+
+    // Rentangnya ikut ke nama berkas supaya dua export dari halaman yang sama
+    // tidak saling menimpa di folder Unduhan. Kunci kolomnya sudah aman untuk
+    // nama berkas: "2026-08-27", "2026-W35", atau "2026-08".
+    const cols = bahanDetailColumns();
+    const stamp = cols.length
+      ? "_" + cols[0].key +
+        (cols.length > 1 ? "_" + cols[cols.length - 1].key : "")
+      : "";
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Bahan Departemen");
+    XLSX.writeFile(wb, `Bahan per Departemen_${chartPeriod}${stamp}.xlsx`);
+  }
+
+  // ── Header tabel yang menempel ──
+  // `.data-table th` sudah position:sticky, tapi di sini aturan itu mati:
+  // .bahan-detail punya overflow-x:auto dan itu menjadikannya scrollport
+  // terdekat, padahal yang bergulir tegak adalah .page-content di luarnya —
+  // sticky hanya menempel pada scrollport-nya sendiri, yang tidak pernah
+  // bergerak. Jadi headernya digandakan ke satu bar fixed di bawah topbar,
+  // cara yang sama dengan halaman Karkas. Yang tidak ikut disalin: scroll
+  // proxy dan dept bar-nya — keduanya melayani tabel selebar layar penuh di
+  // sana, sementara di sini tabelnya cuma satu panel.
+  const BD_TOPBAR_H = 52; // tinggi .topbar; barnya duduk persis di bawahnya
+  let _bahanStickyCleanup = null;
+  let _bahanStickyRefresh = null;
+
+  function destroyBahanStickyHeader() {
+    if (_bahanStickyCleanup) _bahanStickyCleanup();
+    _bahanStickyCleanup = null;
+    _bahanStickyRefresh = null;
+  }
+
+  function initBahanStickyHeader() {
+    destroyBahanStickyHeader();
+
+    const wrap = document.getElementById("bahanDetail");
+    const table = wrap?.querySelector(".krk-table");
+    const thead = table?.querySelector("thead");
+    const sc = document.querySelector(".page-content");
+    if (!wrap || !table || !thead || !sc) return;
+
+    const stickTop = BD_TOPBAR_H - 1;
+    let active = false;
+    let currentDept = null;
+
+    // ── Bar header ──
+    const bar = document.createElement("div");
+    bar.className = "bahan-sticky-head";
+    bar.style.top = stickTop + "px";
+    const cloneTable = document.createElement("table");
+    cloneTable.className = table.className;
+    cloneTable.style.willChange = "transform";
+    bar.appendChild(cloneTable);
+    // Kolom pertama tabel aslinya beku lewat position:sticky. Di dalam bar
+    // yang cuma digeser transform, sticky tidak punya scrollport untuk
+    // dipegang, jadi sel itu disalin sekali lagi sebagai overlay di left:0.
+    const pinnedHeadCell = document.createElement("div");
+    pinnedHeadCell.className = "krk-pinned-header-cell";
+    bar.appendChild(pinnedHeadCell);
+    document.body.appendChild(bar);
+
+    // ── Bar baris departemen ──
+    // Menempel persis di bawah bar header, jadi saat menggulir jauh ke bawah
+    // masih terbaca sedang di departemen mana. Satu tingkat z-index di bawah
+    // header supaya waktu terdorong ke atas dia masuk ke balik header, bukan
+    // menimpanya.
+    const deptBar = document.createElement("div");
+    deptBar.className = "bahan-sticky-dept";
+    const deptCloneTable = document.createElement("table");
+    deptCloneTable.className = table.className;
+    deptCloneTable.style.willChange = "transform";
+    deptBar.appendChild(deptCloneTable);
+    const pinnedDeptCell = document.createElement("div");
+    pinnedDeptCell.className = "krk-pinned-dept-cell";
+    deptBar.appendChild(pinnedDeptCell);
+    document.body.appendChild(deptBar);
+
+    const deptRows = [...table.querySelectorAll(".krk-dept-row")];
+
+    // Lebar kolomnya diukur dari tabel asli lalu dipatok (table-layout:fixed):
+    // salinannya tidak berisi baris data, jadi kalau dibiarkan auto lebarnya
+    // akan menciut mengikuti teks header saja.
+    function measure() {
+      const origThs = thead.querySelectorAll("th");
+      const clone = thead.cloneNode(true);
+      clone.querySelectorAll("th").forEach((th, i) => {
+        const w = origThs[i].offsetWidth + "px";
+        th.style.width = w;
+        th.style.minWidth = w;
+      });
+      cloneTable.innerHTML = "";
+      cloneTable.appendChild(clone);
+      cloneTable.style.tableLayout = "fixed";
+      cloneTable.style.width = table.offsetWidth + "px";
+
+      const firstTh = origThs[0];
+      const mini = document.createElement("table");
+      mini.className = table.className;
+      mini.style.cssText =
+        "table-layout:fixed;width:" + firstTh.offsetWidth + "px;";
+      const miniThead = document.createElement("thead");
+      const miniTr = document.createElement("tr");
+      const miniTh = firstTh.cloneNode(true);
+      miniTh.style.width = firstTh.offsetWidth + "px";
+      miniTr.appendChild(miniTh);
+      miniThead.appendChild(miniTr);
+      mini.appendChild(miniThead);
+      pinnedHeadCell.innerHTML = "";
+      pinnedHeadCell.appendChild(mini);
+    }
+
+    function place() {
+      const r = wrap.getBoundingClientRect();
+      const sl = wrap.scrollLeft;
+      bar.style.left = r.left + "px";
+      bar.style.width = wrap.clientWidth + "px";
+      const tx = "translateX(" + -sl + "px)";
+      cloneTable.style.transform = tx;
+      deptCloneTable.style.transform = tx;
+      // Garis tepi kolom beku cuma dimunculkan saat tabelnya benar-benar
+      // tergeser; di posisi awal dia cuma jadi garis nyasar.
+      const frozen = sl > 0;
+      wrap.classList.toggle("is-frozen", frozen);
+      pinnedHeadCell.classList.toggle("is-frozen", frozen);
+      pinnedDeptCell.classList.toggle("is-frozen", frozen);
+    }
+
+    function hideDeptBar() {
+      deptBar.style.display = "none";
+      currentDept = null;
+    }
+
+    function updateDeptRow() {
+      if (!active) { hideDeptBar(); return; }
+
+      const barBottom = bar.getBoundingClientRect().bottom;
+      let pinnedRow = null;
+      for (let i = 0; i < deptRows.length; i++) {
+        if (deptRows[i].getBoundingClientRect().top < barBottom) {
+          pinnedRow = deptRows[i];
+        } else {
+          break;
+        }
+      }
+      if (!pinnedRow) { hideDeptBar(); return; }
+
+      const dept = pinnedRow.dataset.dept;
+      if (dept !== currentDept) {
+        currentDept = dept;
+
+        const origCells = pinnedRow.querySelectorAll("td");
+        const cloneRow = pinnedRow.cloneNode(true);
+        cloneRow.querySelectorAll("td").forEach((td, i) => {
+          const w = origCells[i].offsetWidth + "px";
+          td.style.width = w;
+          td.style.minWidth = w;
+        });
+        const tbody = document.createElement("tbody");
+        tbody.appendChild(cloneRow);
+        deptCloneTable.innerHTML = "";
+        deptCloneTable.appendChild(tbody);
+        deptCloneTable.style.tableLayout = "fixed";
+        deptCloneTable.style.width = table.offsetWidth + "px";
+
+        const firstTd = origCells[0];
+        const mini = document.createElement("table");
+        mini.className = table.className;
+        mini.style.cssText =
+          "table-layout:fixed;width:" + firstTd.offsetWidth + "px;";
+        const miniTbody = document.createElement("tbody");
+        const miniTr = document.createElement("tr");
+        miniTr.className = pinnedRow.className;
+        miniTr.style.background = BD_BG[dept] || "var(--bg)";
+        const miniTd = firstTd.cloneNode(true);
+        miniTd.style.width = firstTd.offsetWidth + "px";
+        miniTr.appendChild(miniTd);
+        miniTbody.appendChild(miniTr);
+        mini.appendChild(miniTbody);
+        pinnedDeptCell.innerHTML = "";
+        pinnedDeptCell.appendChild(mini);
+        pinnedDeptCell.style.height = pinnedRow.offsetHeight + "px";
+      }
+
+      // Bar ini menempel di bawah header, jadi baris departemen berikutnya
+      // naik LEWAT BAWAHNYA — sampai baris itu benar-benar melewati garis,
+      // yang terlihat masih departemen lama walau peralihannya sudah 90%.
+      // Solusinya bukan menaikkan z-index (baris aslinya ada di dalam
+      // .page-content, tidak bisa menang lawan elemen fixed di body), tapi
+      // mendorong bar lama ke atas persis sebanyak baris baru masuk. Yang
+      // terdorong ke atas garis tertutup bar header dan topbar, jadi tidak
+      // ada yang bocor ke layar.
+      const rowH = pinnedRow.offsetHeight;
+      const next = deptRows[deptRows.indexOf(pinnedRow) + 1];
+      let shift = 0;
+      if (next) {
+        const overlap =
+          barBottom + rowH - next.getBoundingClientRect().top;
+        if (overlap > 0) shift = Math.min(overlap, rowH);
+      }
+
+      const r = wrap.getBoundingClientRect();
+      deptBar.style.top = barBottom - shift + "px";
+      deptBar.style.left = r.left + "px";
+      deptBar.style.width = wrap.clientWidth + "px";
+      deptCloneTable.style.transform =
+        "translateX(" + -wrap.scrollLeft + "px)";
+      deptBar.style.display = "block";
+    }
+
+    // Bar-nya muncul begitu baris judul asli lewat di balik topbar, dan hilang
+    // lagi begitu tabelnya habis — kalau tidak, headernya menggantung di atas
+    // section berikutnya yang bukan miliknya.
+    function update() {
+      const r = wrap.getBoundingClientRect();
+      const headH = thead.offsetHeight;
+      const want = r.top < stickTop && r.bottom > stickTop + headH;
+      if (want !== active) {
+        active = want;
+        if (active) measure();
+        bar.style.display = active ? "block" : "none";
+      }
+      if (active) place();
+      updateDeptRow();
+    }
+
+    // Klik di bar departemen melipat departemen itu, sama seperti klik di
+    // baris aslinya. Halamannya digulir dulu supaya baris asli duduk persis
+    // di bawah header — tanpa itu, isi yang menyusut menarik konten di
+    // bawahnya ke atas dan posisi baca melompat.
+    deptBar.addEventListener("click", () => {
+      if (!currentDept) return;
+      const origRow = deptRows.find((r) => r.dataset.dept === currentDept);
+      if (!origRow) return;
+      const barBottom = bar.getBoundingClientRect().bottom;
+      sc.scrollTop += origRow.getBoundingClientRect().top - barBottom;
+      origRow.click();
+      currentDept = null;
+      updateDeptRow();
+    });
+
+    let ticking = false;
+    function onScroll() {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(() => {
+        ticking = false;
+        update();
+      });
+    }
+
+    sc.addEventListener("scroll", onScroll, { passive: true });
+    wrap.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    update();
+
+    // Melipat departemen mengubah tinggi tabel tanpa ada scroll yang terjadi,
+    // jadi pemicunya harus dipanggil tangan dari penangan klik baris. Diukur
+    // ulang dari nol karena lebar kolom ikut berubah saat baris material yang
+    // paling panjang namanya ikut tersembunyi.
+    _bahanStickyRefresh = () => {
+      active = false;
+      bar.style.display = "none";
+      hideDeptBar();
+      update();
+    };
+
+    _bahanStickyCleanup = () => {
+      sc.removeEventListener("scroll", onScroll);
+      wrap.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+      bar.remove();
+      deptBar.remove();
+      wrap.classList.remove("is-frozen");
+    };
   }
 
   function openChartRangePicker() {
@@ -1249,6 +1876,10 @@ const OverviewPage = (() => {
       redrawTrafficDetail();
     });
 
+    document
+      .getElementById("trafficExportBtn")
+      ?.addEventListener("click", exportTrafficDetail);
+
     // Legendanya lahir ulang tiap tabel digambar, jadi kliknya ditangkap di
     // wadahnya — satu listener yang tidak perlu dipasang ulang.
     document.getElementById("trafficDetail")?.addEventListener("click", (e) => {
@@ -1686,6 +2317,60 @@ const OverviewPage = (() => {
           </tfoot>
         </table>
       </div>`;
+  }
+
+  // ── Export matriks Material × Jam ke .xlsx ──
+  // Dibangun dari baris yang sudah di tangan (_trafficDetailRows), BUKAN dari
+  // tabel di layar seperti export tabel Bahan per Departemen. Alasannya nama
+  // material: di layar dipendekkan jadi "K 1.2" supaya muat di 24 kolom jam,
+  // sementara di berkas ruangnya tidak terbatas dan nama utuhnya yang berguna.
+  //
+  // Metriknya ikut toggle BRD/KG, sama dengan yang sedang tampil. Jam tanpa
+  // transfer ditulis sebagai sel KOSONG, bukan 0 — sama seperti di layar:
+  // "tidak ada" dan "ada tapi kecil sekali" tidak boleh terbaca sama.
+  function exportTrafficDetail() {
+    const rows = _trafficDetailRows;
+    if (!rows || !rows.length || typeof XLSX === "undefined") return;
+
+    const mi = trafficMetricIdx();
+    const metricLabel = trafficMetric === "kg" ? "KG" : "BRD";
+
+    const head = ["Material (" + metricLabel + ")"]
+      .concat(TRAFFIC_HOURS.map((h) => pad2h(h) + ":00"))
+      .concat(["Total"]);
+
+    const hourTotal = new Array(24).fill(0);
+    let grand = 0;
+
+    const body = rows.map((r) => {
+      let rowTotal = 0;
+      const cells = TRAFFIC_HOURS.map((h) => {
+        const v = r.hours[mi][h];
+        rowTotal += v;
+        hourTotal[h] += v;
+        return v ? v : null;
+      });
+      grand += rowTotal;
+      return [r.md].concat(cells, [rowTotal || null]);
+    });
+
+    const foot = ["Total"]
+      .concat(TRAFFIC_HOURS.map((h) => hourTotal[h] || null))
+      .concat([grand || null]);
+
+    const ws = XLSX.utils.aoa_to_sheet([head, ...body, foot]);
+    // Tanpa lebar kolom, nama material yang panjang tertutup kolom jam di
+    // sebelahnya begitu berkasnya dibuka.
+    ws["!cols"] = [{ wch: 26 }]
+      .concat(TRAFFIC_HOURS.map(() => ({ wch: 6 })))
+      .concat([{ wch: 10 }]);
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Trafic " + trafficDate);
+    XLSX.writeFile(
+      wb,
+      `Trafic Bahan Karkas_${trafficDate}_${metricLabel}.xlsx`,
+    );
   }
 
   function renderTrafficSummary(day, ym) {
@@ -3070,5 +3755,13 @@ const OverviewPage = (() => {
     redrawTrafficDetail();
   }
 
-  return { render, refreshTraffic, setTrafficDetail, setTrafficDeptMap };
+  // Dipanggil navbar sebelum halaman lain digambar. Yang wajib dibongkar cuma
+  // bar header tabel detail: dia elemen fixed di <body>, jadi tidak ikut hilang
+  // saat isi #pageContent ditimpa — sisa state halaman ini semuanya di dalam
+  // container dan lahir ulang tiap render().
+  function destroy() {
+    destroyBahanStickyHeader();
+  }
+
+  return { render, destroy, refreshTraffic, setTrafficDetail, setTrafficDeptMap };
 })();
